@@ -190,9 +190,9 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
                               _openmc_problem.scaling() * _openmc_problem.scaling();
       total += power_fraction;
 
-      std::vector<unsigned int> elem_ids = {mesh_offset + e};
       auto var = var_numbers[_num_ext_filter_bins * local_score + ext_bin];
-      fillElementalAuxVariable(var, elem_ids, volumetric_power);
+      auto elem_id = _is_adaptive ? _active_to_total_mapping[e] : offset + e;
+      fillElementalAuxVariable(var_numbers[local_score], { elem_id }, volumetric_power);
     }
   }
 

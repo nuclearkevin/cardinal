@@ -27,7 +27,7 @@
     [Mesh]
       type = MeshTally
       mesh_template = '../meshes/sphere.e'
-      output = 'unrelaxed_tally_std_dev'
+      output = 'unrelaxed_tally_std_dev unrelaxed_tally_rel_error'
     []
   []
 []
@@ -46,6 +46,11 @@
   [std_dev_at_pt]
     type = PointValue
     variable = kappa_fission_std_dev
+    point = '0.896826 0.189852 0.608855'
+  []
+  [rel_err_at_pt]
+    type = PointValue
+    variable = kappa_fission_rel_error
     point = '0.896826 0.189852 0.608855'
   []
 []

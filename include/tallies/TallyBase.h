@@ -281,6 +281,9 @@ protected:
   /// Current "raw" tally output from Monte Carlo solution
   std::vector<xt::xtensor<double, 1>> _current_raw_tally;
 
+  /// Current "raw" tally relative error
+  std::vector<xt::xtensor<double, 1>> _current_raw_tally_rel_error;
+
   /// Current "raw" tally standard deviation
   std::vector<xt::xtensor<double, 1>> _current_raw_tally_std_dev;
 

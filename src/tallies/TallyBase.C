@@ -57,15 +57,17 @@ TallyBase::validParams()
       "one "
       "value of 'trigger_ignore_zeros' is provided, that value is applied to all tally scores.");
 
-  MultiMooseEnum openmc_outputs("unrelaxed_tally_std_dev unrelaxed_tally");
+  MultiMooseEnum openmc_outputs("unrelaxed_tally_std_dev unrelaxed_tally_rel_error unrelaxed_tally");
   params.addParam<MultiMooseEnum>("output",
                                   openmc_outputs,
                                   "UNRELAXED field(s) to output from OpenMC for each tally score. "
                                   "unrelaxed_tally_std_dev will write the standard deviation of "
                                   "each tally into auxiliary variables "
-                                  "named *_std_dev. Unrelaxed_tally will write the raw unrelaxed "
-                                  "tally into auxiliary variables "
-                                  "named *_raw (replace * with 'name').");
+                                  "named *_std_dev. unrelaxed_tally_rel_error will write the "
+                                  "relative standard deviation (unrelaxed_tally_std_dev / unrelaxed_tally) "
+                                  "of each tally into auxiliary variables named *_rel_error. "
+                                  "unrelaxed_tally will write the raw unrelaxed tally into auxiliary "
+                                  "variables named *_raw (replace * with 'name').");
 
   params.addParam<std::vector<std::string>>("filters", "External filters to add to this tally.");
 
@@ -196,6 +198,8 @@ TallyBase::TallyBase(const InputParameters & parameters)
 
       if (o == "UNRELAXED_TALLY_STD_DEV")
         _output_name.push_back("std_dev");
+      else if (o == "UNRELAXED_TALLY_REL_ERROR")
+        _output_name.push_back("rel_error");
       else if (o == "UNRELAXED_TALLY")
         _output_name.push_back("raw");
       else
@@ -229,6 +233,7 @@ TallyBase::TallyBase(const InputParameters & parameters)
 
   _current_tally.resize(_tally_score.size());
   _current_raw_tally.resize(_tally_score.size());
+  _current_raw_tally_rel_error.resize(_tally_score.size());
   _current_raw_tally_std_dev.resize(_tally_score.size());
   _previous_tally.resize(_tally_score.size());
 }
@@ -241,11 +246,6 @@ TallyBase::initializeTally()
   _local_sum_tally.resize(_tally_score.size(), 0.0);
   _local_mean_tally.clear();
   _local_mean_tally.resize(_tally_score.size(), 0.0);
-
-  _current_tally.resize(_tally_score.size());
-  _current_raw_tally.resize(_tally_score.size());
-  _current_raw_tally_std_dev.resize(_tally_score.size());
-  _previous_tally.resize(_tally_score.size());
 
   auto [index, spatial_filter] = spatialFilter();
   _filter_index = index;
@@ -310,6 +310,7 @@ TallyBase::addScore(const std::string & score)
 
   _current_tally.resize(_tally_score.size());
   _current_raw_tally.resize(_tally_score.size());
+  _current_raw_tally_rel_error.resize(_tally_score.size());
   _current_raw_tally_std_dev.resize(_tally_score.size());
   _previous_tally.resize(_tally_score.size());
 }
@@ -330,6 +331,7 @@ TallyBase::relaxAndNormalizeTally(unsigned int local_score, const Real & alpha, 
   auto & current = _current_tally[local_score];
   auto & previous = _previous_tally[local_score];
   auto & current_raw = _current_raw_tally[local_score];
+  auto & current_error = _current_raw_tally_rel_error[local_score];
   auto & current_raw_std_dev = _current_raw_tally_std_dev[local_score];
 
   auto mean_tally = _openmc_problem.tallySum(_local_tally, local_score);
@@ -345,8 +347,8 @@ TallyBase::relaxAndNormalizeTally(unsigned int local_score, const Real & alpha, 
                          xt::all(),
                          local_score,
                          static_cast<int>(openmc::TallyResult::SUM_SQ));
-  auto rel_err = _openmc_problem.relativeError(mean_tally, sum_sq, _local_tally->n_realizations_);
-  current_raw_std_dev = rel_err * current_raw;
+  current_error = _openmc_problem.relativeError(mean_tally, sum_sq, _local_tally->n_realizations_);
+  current_raw_std_dev = current_error * current_raw;
 
   if (_openmc_problem.fixedPointIteration() == 0 || alpha == 1.0)
   {
