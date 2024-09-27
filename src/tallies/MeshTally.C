@@ -170,7 +170,8 @@ Real
 MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
                              unsigned int local_score,
                              unsigned int global_score,
-                             std::vector<xt::xtensor<double, 1>> tally_vals)
+                             std::vector<xt::xtensor<double, 1>> tally_vals,
+                             bool normalized)
 {
   Real total = 0.0;
 
@@ -185,14 +186,16 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
       // because we will apply it as a volumetric tally (per unit volume).
       // Because we require that the mesh template has units of cm based on the
       // mesh constructors in OpenMC, we need to adjust the division
-      Real volumetric_power = power_fraction * _openmc_problem.tallyMultiplier(global_score) /
-                              _mesh_template->volume(e) * _openmc_problem.scaling() *
-                              _openmc_problem.scaling() * _openmc_problem.scaling();
+      Real volumetric_power = power_fraction;
+      volumetric_power *= normalized ? _openmc_problem.tallyMultiplier(global_score) /
+                                       _mesh_template->volume(e) * _openmc_problem.scaling() *
+                                       _openmc_problem.scaling() * _openmc_problem.scaling()
+                                       : 1.0;
       total += power_fraction;
 
       auto var = var_numbers[_num_ext_filter_bins * local_score + ext_bin];
-      auto elem_id = _is_adaptive ? _active_to_total_mapping[e] : offset + e;
-      fillElementalAuxVariable(var_numbers[local_score], { elem_id }, volumetric_power);
+      auto elem_id = _is_adaptive ? _active_to_total_mapping[e] : mesh_offset + e;
+      fillElementalAuxVariable(var, { elem_id }, volumetric_power);
     }
   }
 
@@ -210,7 +213,7 @@ MeshTally::checkMeshTemplateAndTranslations() const
   unsigned int mesh_offset = _instance * _mesh_filter->n_bins();
   for (int e = 0; e < _mesh_filter->n_bins(); ++e)
   {
-    auto elem_id = _is_adaptive ? _active_to_total_mapping[e] : offset + e;
+    auto elem_id = _is_adaptive ? _active_to_total_mapping[e] : mesh_offset + e;
     auto elem_ptr = _mesh.queryElemPtr(elem_id);
 
     // if element is not on this part of the distributed mesh, skip it

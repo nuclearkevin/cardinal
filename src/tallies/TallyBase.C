@@ -288,6 +288,8 @@ TallyBase::storeResults(const std::vector<unsigned int> & var_numbers,
     total += storeResultsInner(var_numbers, local_score, global_score, _current_tally);
   else if (output_type == "std_dev")
     storeResultsInner(var_numbers, local_score, global_score, _current_raw_tally_std_dev);
+  else if (output_type == "rel_error")
+    storeResultsInner(var_numbers, local_score, global_score, _current_raw_tally_rel_error, false);
   else if (output_type == "raw")
     storeResultsInner(var_numbers, local_score, global_score, _current_raw_tally);
   else

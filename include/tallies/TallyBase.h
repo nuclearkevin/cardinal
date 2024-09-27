@@ -185,7 +185,8 @@ protected:
   virtual Real storeResultsInner(const std::vector<unsigned int> & var_numbers,
                                  unsigned int local_score,
                                  unsigned int global_score,
-                                 std::vector<xt::xtensor<double, 1>> tally_vals) = 0;
+                                 std::vector<xt::xtensor<double, 1>> tally_vals,
+                                 bool normalized = true) = 0;
 
   /**
    * Set an auxiliary elemental variable to a specified value
