@@ -17,7 +17,7 @@ protected:
   virtual Real computeValue() override;
 
   /// The variable containing the total reaction rate.
-  const VariableValue & _total_rxn_rate;
+  const VariableValue & _rxn_rate;
 
   /// The variable containing the scalar flux.
   const VariableValue & _scalar_flux;
