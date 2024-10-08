@@ -1,9 +1,9 @@
-#include "ParticleOpticalDepthAux.h"
+#include "OpticalDepthAux.h"
 
-registerMooseObject("CardinalApp", ParticleOpticalDepthAux);
+registerMooseObject("CardinalApp", OpticalDepthAux);
 
 InputParameters
-ParticleOpticalDepthAux::validParams()
+OpticalDepthAux::validParams()
 {
   auto params = AuxKernel::validParams();
   params.addClassDescription("A class which computes an estimate of the optical depth 'seen' by a particle within an element.");
@@ -13,7 +13,7 @@ ParticleOpticalDepthAux::validParams()
   return params;
 }
 
-ParticleOpticalDepthAux::ParticleOpticalDepthAux(const InputParameters & parameters)
+OpticalDepthAux::OpticalDepthAux(const InputParameters & parameters)
   : AuxKernel(parameters),
     _rxn_rate(coupledValue("reaction_rate")),
     _scalar_flux(coupledValue("scalar_flux"))
@@ -23,7 +23,7 @@ ParticleOpticalDepthAux::ParticleOpticalDepthAux(const InputParameters & paramet
 }
 
 Real
-ParticleOpticalDepthAux::computeValue()
+OpticalDepthAux::computeValue()
 {
   // Prevent a divide by zero when the scalar flux is small / has bad statistics.
   return _scalar_flux[_qp] < libMesh::TOLERANCE ? 0.0 : _rxn_rate[_qp] / _scalar_flux[_qp] * _current_elem->hmax();
