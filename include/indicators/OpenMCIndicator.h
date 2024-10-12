@@ -18,34 +18,24 @@
 
 #pragma once
 
-#include "Marker.h"
-#include "Coupleable.h"
-#include "MaterialPropertyInterface.h"
+#include "Indicator.h"
 
-/**
- * A Marker which marks elements for refinement/coarsening based on an estimate of the optical depth of a
- * neutron/photon which traverses the element.
- */
-class OpticalDepthMarker : public Marker,
-                           public Coupleable
+#include "OpenMCCellAverageProblem.h"
+
+class OpenMCIndicator : public Indicator
 {
 public:
   static InputParameters validParams();
 
-  OpticalDepthMarker(const InputParameters & parameters);
+  OpenMCIndicator(const InputParameters & parameters);
 
 protected:
-  virtual MarkerValue computeElementMarker() override;
+  /// The OpenMCCellAverageProblem associated with this indicator.
+  const OpenMCCellAverageProblem * _openmc_problem;
 
-  /// The refinement threshold.
-  const Real & _refine;
+  /// The field variable holding the results of this indicator.
+  MooseVariable & _field_var;
 
-  /// The coarsening threshold.
-  const Real & _coarsen;
-
-  /// The variable containing the total reaction rate.
-  const VariableValue & _rxn_rate;
-
-  /// The variable containing the scalar flux.
-  const VariableValue & _scalar_flux;
+  /// The current element.
+  const Elem * const & _current_elem;
 };

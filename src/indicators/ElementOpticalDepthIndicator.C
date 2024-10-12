@@ -1,0 +1,99 @@
+/********************************************************************/
+/*                  SOFTWARE COPYRIGHT NOTIFICATION                 */
+/*                             Cardinal                             */
+/*                                                                  */
+/*                  (c) 2021 UChicago Argonne, LLC                  */
+/*                        ALL RIGHTS RESERVED                       */
+/*                                                                  */
+/*                 Prepared by UChicago Argonne, LLC                */
+/*               Under Contract No. DE-AC02-06CH11357               */
+/*                With the U. S. Department of Energy               */
+/*                                                                  */
+/*             Prepared by Battelle Energy Alliance, LLC            */
+/*               Under Contract No. DE-AC07-05ID14517               */
+/*                With the U. S. Department of Energy               */
+/*                                                                  */
+/*                 See LICENSE for full restrictions                */
+/********************************************************************/
+
+#ifdef ENABLE_OPENMC_COUPLING
+
+#include "ElementOpticalDepthIndicator.h"
+
+#include "CardinalEnums.h"
+#include "TallyBase.h"
+
+registerMooseObject("CardinalApp", ElementOpticalDepthIndicator);
+
+InputParameters
+ElementOpticalDepthIndicator::validParams()
+{
+  auto params = OpenMCIndicator::validParams();
+  params.addClassDescription(
+    "A class which returns the estimate of a given element's optical depth under the assumption that "
+    "elements with a large optical depth experience large solution gradients.");
+  params.addRequiredParam<MooseEnum>(
+    "rxn_rate", getSingleTallyScoreEnum(), "The reaction rate to use for computing the optical depth.");
+
+  return params;
+}
+
+ElementOpticalDepthIndicator::ElementOpticalDepthIndicator(const InputParameters & parameters)
+  : OpenMCIndicator(parameters),
+    Coupleable(this, false, false)
+{
+  std::string score = getParam<MooseEnum>("rxn_rate");
+  std::replace(score.begin(), score.end(), '_', '-');
+
+  // Error check to make sure the score is a reaction rate score and to make sure one of the [Tallies]
+  // has added the score and a flux score.
+  if (!_openmc_problem->isReactionRateScore(score))
+    mooseError(
+      "At present the ElementOpticalDepthIndicator only works with reaction rate scores. "
+      + std::string(getParam<MooseEnum>("rxn_rate")) + " is not a valid reaction rate score.");
+
+  const auto & all_scores = _openmc_problem->getTallyScores();
+  if (std::find(all_scores.begin(), all_scores.end(), score) == all_scores.end())
+    mooseError(
+      "The problem does not contain any score named " + std::string(getParam<MooseEnum>("rxn_rate")) + "! Please "
+      "ensure that one of your [Tallies] is scoring the requested reaction rate.");
+
+  if (std::find(all_scores.begin(), all_scores.end(), "flux") == all_scores.end())
+    mooseError("In order to use an ElementOpticalDepthIndicator one of your [Tallies] must add a flux score.");
+
+  // Grab the reaction rate / flux variables from the [Tallies].
+  const auto & tallies = _openmc_problem->getLocalTally();
+  for (const auto & t : tallies)
+  {
+    if (t->hasScore(score))
+    {
+      auto vars = t->getScoreVars(score);
+      for (const auto & v : vars)
+        _rxn_rates.emplace_back(&(dynamic_cast<MooseVariableFE<Real>*>(&_subproblem.getVariable(_tid, v))->sln()));
+    }
+    if (t->hasScore("flux"))
+    {
+      auto vars = t->getScoreVars("flux");
+      for (const auto & v : vars)
+        _scalar_fluxes.emplace_back(&(dynamic_cast<MooseVariableFE<Real>*>(&_subproblem.getVariable(_tid, v))->sln()));
+    }
+  }
+}
+
+void
+ElementOpticalDepthIndicator::computeIndicator()
+{
+  Real rxn_rate = 0.0;
+  Real scalar_flux = 0.0;
+
+  for (const auto & var : _rxn_rates)
+    rxn_rate += (*var)[0];
+
+  for (const auto & var : _scalar_fluxes)
+    scalar_flux += (*var)[0];
+
+  auto od = scalar_flux < libMesh::TOLERANCE ? 0.0 : rxn_rate / scalar_flux * _current_elem->hmax();
+  _field_var.setNodalValue(od);
+}
+
+#endif
