@@ -20,14 +20,11 @@
 
 #include "OpenMCIndicator.h"
 
-#include "Coupleable.h"
-
 /**
  * An Indicator which returns an estimate of the optical depth experienced by photons/neutrons which
  * traverse the element.
 */
-class ElementOpticalDepthIndicator : public OpenMCIndicator,
-                                     public Coupleable
+class ElementOpticalDepthIndicator : public OpenMCIndicator
 {
 public:
   static InputParameters validParams();

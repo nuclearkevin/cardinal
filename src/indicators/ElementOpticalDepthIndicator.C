@@ -39,8 +39,7 @@ ElementOpticalDepthIndicator::validParams()
 }
 
 ElementOpticalDepthIndicator::ElementOpticalDepthIndicator(const InputParameters & parameters)
-  : OpenMCIndicator(parameters),
-    Coupleable(this, false, false)
+  : OpenMCIndicator(parameters)
 {
   std::string score = getParam<MooseEnum>("rxn_rate");
   std::replace(score.begin(), score.end(), '_', '-');
