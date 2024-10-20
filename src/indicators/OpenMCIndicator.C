@@ -43,4 +43,25 @@ OpenMCIndicator::OpenMCIndicator(const InputParameters & parameters)
     mooseError("This indicator can only be used with problems of type 'OpenMCCellAverageProblem'!");
 }
 
+std::vector<const VariableValue *>
+OpenMCIndicator::getTallyScoreVariableValues(const std::string & score)
+{
+  std::vector<const VariableValue *> score_vars;
+  const auto & tallies = _openmc_problem->getLocalTally();
+  for (const auto & t : tallies)
+  {
+    if (t->hasScore(score))
+    {
+      auto vars = t->getScoreVars(score);
+      for (const auto & v : vars)
+        score_vars.emplace_back(&(dynamic_cast<MooseVariableFE<Real>*>(&_subproblem.getVariable(_tid, v))->sln()));
+    }
+  }
+
+  if (score_vars.size() == 0)
+    mooseError("No tallies contain the requested score " + score + "!");
+
+  return score_vars;
+}
+
 #endif

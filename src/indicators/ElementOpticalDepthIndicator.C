@@ -61,22 +61,8 @@ ElementOpticalDepthIndicator::ElementOpticalDepthIndicator(const InputParameters
     mooseError("In order to use an ElementOpticalDepthIndicator one of your [Tallies] must add a flux score.");
 
   // Grab the reaction rate / flux variables from the [Tallies].
-  const auto & tallies = _openmc_problem->getLocalTally();
-  for (const auto & t : tallies)
-  {
-    if (t->hasScore(score))
-    {
-      auto vars = t->getScoreVars(score);
-      for (const auto & v : vars)
-        _rxn_rates.emplace_back(&(dynamic_cast<MooseVariableFE<Real>*>(&_subproblem.getVariable(_tid, v))->sln()));
-    }
-    if (t->hasScore("flux"))
-    {
-      auto vars = t->getScoreVars("flux");
-      for (const auto & v : vars)
-        _scalar_fluxes.emplace_back(&(dynamic_cast<MooseVariableFE<Real>*>(&_subproblem.getVariable(_tid, v))->sln()));
-    }
-  }
+  _rxn_rates = getTallyScoreVariableValues(score);
+  _scalar_fluxes = getTallyScoreVariableValues("flux");
 }
 
 void

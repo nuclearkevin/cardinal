@@ -30,6 +30,13 @@ public:
   OpenMCIndicator(const InputParameters & parameters);
 
 protected:
+  /**
+   * Get the variable(s) associated with an OpenMC tally score.
+   * @param[in] score the OpenMC score
+   * @return a vector of variable values associated with score
+   */
+  std::vector<const VariableValue *> getTallyScoreVariableValues(const std::string & score);
+
   /// The OpenMCCellAverageProblem associated with this indicator.
   const OpenMCCellAverageProblem * _openmc_problem;
 
