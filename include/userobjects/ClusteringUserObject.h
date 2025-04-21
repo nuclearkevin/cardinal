@@ -1,7 +1,7 @@
 #pragma once
 
 #include "GeneralUserObject.h"
-#include "NonlinearSystemBase.h"
+#include "AuxiliarySystem.h"
 
 class ClusteringUserObject: public GeneralUserObject{
 
@@ -16,14 +16,15 @@ public:
 
     //void findCluster();
     Real getMetricData(const Elem * elem);
+    void applyNoClusteringInitialCondition();
     //virtual bool belongsToCluster(libMesh::Elem *base_element, libMesh::Elem *neighbor_elem);
 
     const ExtraElementIDName _id_name;
     const unsigned int _extra_integer_index=0;
     libMesh::MeshBase& _mesh;
-    const VariableName _metric_variable_name;
+    const AuxVariableName _metric_variable_name;
     MooseVariableFEBase & _metric_variable;
-    NonlinearSystemBase & _nl ;
+    AuxiliarySystem & _auxiliary_system ;
     libMesh::DofMap & _dof_map;
 
     const unsigned int _metric_variable_index;
