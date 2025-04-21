@@ -34,8 +34,6 @@ ClusteringUserObject::ClusteringUserObject(const InputParameters & parameters)
 
 
 void ClusteringUserObject::execute(){
-
-    std::cout<<" mara khao \n";
     std::cout<<_id_name<<"\n";
 
 
