@@ -14,21 +14,22 @@ ClusteringUserObject::validParams(){
 
     return params;
 }
-clear
+
+
 ClusteringUserObject::ClusteringUserObject(const InputParameters & parameters)
     :GeneralUserObject(parameters),
     _id_name(getParam<ExtraElementIDName>("id_name")),
     _mesh(_fe_problem.mesh()),
     _metric_variable_name(getParam<VariableName>("metric_variable_name")),
-    _metric_variable(_fe_problem.getVariable(_tid,
-                                             getParam<VariableName>("variable"),
-                                             Moose::VarKindType::VAR_AUXILIARY,
-                                             Moose::VarFieldType::VAR_FIELD_SCALAR)),
+    _metric_variable(_fe_problem.getVariable(_tid,_metric_variable_name)),
      _nl(_fe_problem.getNonlinearSystemBase(_sys.number())),
      _dof_map(_nl.dofMap()),
      _metric_variable_index(_nl.getVariable(_tid, _metric_variable_name).number())
 
 {
+    //have to move to aux kernel system
+    //non linear system is only related to
+    //when some sort of physics is solved
 }
 
 
@@ -41,9 +42,11 @@ void ClusteringUserObject::execute(){
 
     for (auto & elem:_mesh.element_ptr_range()){
         libMesh::Point centroid = elem->vertex_average();
-        std::cout<<elem->get_extra_integer(0)<<" ";
-        elem->set_extra_integer(0, 10);
-        std::cout<<elem->get_extra_integer(0)<<"\n";
+        //std::cout<<elem->get_extra_integer(0)<<" ";
+        //elem->set_extra_integer(0, 10);
+        //std::cout<<elem->get_extra_integer(0)<<"\n";
+
+        std::cout<<getMetricData(elem);
 
     }
 
