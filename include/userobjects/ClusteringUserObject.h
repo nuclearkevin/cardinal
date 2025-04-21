@@ -17,7 +17,7 @@ public:
     //void findCluster();
     Real getMetricData(const Elem * elem);
     void applyNoClusteringInitialCondition();
-    //virtual bool belongsToCluster(libMesh::Elem *base_element, libMesh::Elem *neighbor_elem);
+    virtual bool belongsToCluster(libMesh::Elem *base_element, libMesh::Elem *neighbor_elem) =0;
 
     const ExtraElementIDName _id_name;
     const unsigned int _extra_integer_index=0;

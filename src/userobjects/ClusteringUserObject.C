@@ -2,8 +2,6 @@
 #include "AuxiliarySystem.h"
 
 
-registerMooseObject("CardinalApp", ClusteringUserObject);
-
 InputParameters
 ClusteringUserObject::validParams(){
     InputParameters params = GeneralUserObject::validParams();
@@ -38,18 +36,7 @@ void ClusteringUserObject::execute(){
     std::cout<<_id_name<<"\n";
 
     applyNoClusteringInitialCondition();
-
-    for (auto & elem:_mesh.element_ptr_range()){
-
-        libMesh::Point centroid = elem->vertex_average();
-        //std::cout<<elem->get_extra_integer(0)<<" ";
-        //elem->set_extra_integer(0, 10);
-        //std::cout<<elem->get_extra_integer(0)<<"\n";
-
-        std::cout<<getMetricData(elem);
-
-    }
-
+    findCluster();
 
 }
 
@@ -72,3 +59,38 @@ void ClusteringUserObject::applyNoClusteringInitialCondition(){
         }
     }
 }
+
+void ClusteringUserObject::findCluster() {
+
+    std::stack<libMesh::Elem *> neighbor_stack;
+
+    for (auto &elem : _mesh.element_ptr_range()) {
+        if (elem->get_extra_integer(_extra_integer_index) != -1) {
+            continue;
+        }
+        int cluster_id = elem->id();
+        neighbor_stack.push(elem);
+
+
+        while (!neighbor_stack.empty()) {
+            libMesh::Elem *current_elem = neighbor_stack.top();
+            neighbor_stack.pop();
+
+            for (unsigned int s = 0; s < current_elem->n_sides(); s++) {
+                libMesh::Elem *neighbor_elem = current_elem->neighbor_ptr(s);
+
+                if (neighbor_elem && neighbor_elem->get_extra_integer(
+                        _extra_integer_index) == not_visited) {
+                    if (belongToCluster(current_elem, neighbor_elem)) {
+
+                        elem->set_extra_integer(_extra_integer_index, cluster_id);
+                        neighbor_elem->set_extra_integer(_extra_integer_index,
+                                                         cluster_id);
+                        neighbor_stack.push(neighbor_elem);
+                    }
+                }
+            }
+        }
+    }
+}
+
