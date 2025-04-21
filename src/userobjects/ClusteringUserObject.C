@@ -1,7 +1,6 @@
 #include "ClusteringUserObject.h"
 #include "AuxiliarySystem.h"
 
-
 InputParameters
 ClusteringUserObject::validParams(){
     InputParameters params = GeneralUserObject::validParams();
@@ -18,19 +17,15 @@ ClusteringUserObject::validParams(){
 ClusteringUserObject::ClusteringUserObject(const InputParameters & parameters)
         :GeneralUserObject(parameters),
          _id_name(getParam<ExtraElementIDName>("id_name")),
-         _mesh(_fe_problem.mesh()),
+         _mesh(_fe_problem.mesh().getMesh()),
          _metric_variable_name(getParam<AuxVariableName>("metric_variable_name")),
          _metric_variable(_fe_problem.getVariable(_tid,_metric_variable_name)),
          _auxiliary_system(_fe_problem.getAuxiliarySystem()),
          _dof_map(_auxiliary_system.dofMap()),
          _metric_variable_index(_auxiliary_system.getVariable(_tid, _metric_variable_name).number())
-
+         //it's not using the extra_integer set by the generated mesh generator
 {
-    //have to move to aux kernel system
-    //non linear system is only related to
-    //when some sort of physics is solved
 }
-
 
 void ClusteringUserObject::execute(){
     std::cout<<_id_name<<"\n";
@@ -53,10 +48,8 @@ ClusteringUserObject::getMetricData(const libMesh::Elem *elem) {
 }
 
 void ClusteringUserObject::applyNoClusteringInitialCondition(){
-    for (auto &elem:_mesh.element_ptr_range()){
-        if (elem){
-            elem->set_extra_integer(_extra_integer_index,-1);
-        }
+    for (auto &elem:_fe_problem.mesh().getMesh().active_element_ptr_range()){
+        elem->set_extra_integer(_extra_integer_index,not_visited);
     }
 }
 
@@ -64,13 +57,12 @@ void ClusteringUserObject::findCluster() {
 
     std::stack<libMesh::Elem *> neighbor_stack;
 
-    for (auto &elem : _mesh.element_ptr_range()) {
-        if (elem->get_extra_integer(_extra_integer_index) != -1) {
+    for (auto &elem: _fe_problem.mesh().getMesh().active_element_ptr_range()) {
+        if (elem->get_extra_integer(_extra_integer_index) != not_visited) {
             continue;
         }
         int cluster_id = elem->id();
         neighbor_stack.push(elem);
-
 
         while (!neighbor_stack.empty()) {
             libMesh::Elem *current_elem = neighbor_stack.top();
@@ -81,7 +73,7 @@ void ClusteringUserObject::findCluster() {
 
                 if (neighbor_elem && neighbor_elem->get_extra_integer(
                         _extra_integer_index) == not_visited) {
-                    if (belongToCluster(current_elem, neighbor_elem)) {
+                    if (belongsToCluster(current_elem, neighbor_elem)) {
 
                         elem->set_extra_integer(_extra_integer_index, cluster_id);
                         neighbor_elem->set_extra_integer(_extra_integer_index,
@@ -91,6 +83,7 @@ void ClusteringUserObject::findCluster() {
                 }
             }
         }
-    }
-}
 
+    }
+
+}
