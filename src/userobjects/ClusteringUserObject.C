@@ -1,6 +1,5 @@
 #include "ClusteringUserObject.h"
 
-
 registerMooseObject("CardinalApp", ClusteringUserObject);
 
 InputParameters
@@ -39,6 +38,7 @@ void ClusteringUserObject::execute(){
 
 
     for (auto & elem:_mesh.element_ptr_range()){
+
         libMesh::Point centroid = elem->vertex_average();
         //std::cout<<elem->get_extra_integer(0)<<" ";
         //elem->set_extra_integer(0, 10);
