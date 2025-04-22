@@ -26,14 +26,14 @@ ClusteringUserObject::ClusteringUserObject(const InputParameters & parameters)
 
     if (!_mesh.has_elem_integer(_id_name))
     {
-        mooseError("Mesh does not have an extra element integer named '", _id_name, "'."
-                 " Ensure your mesh generator defines it with `extra_element_integers`.");
+        mooseError("Mesh does not have an extra element integer named ", _id_name, "."
+                 " Ensure your mesh generator defines it with extra_element_integers.");
     }
     _extra_integer_index = _mesh.get_elem_integer_index(_id_name);
 }
 
 void ClusteringUserObject::execute(){
-    std::cout<<_id_name<<"\n";
+    //std::cout<<_id_name<<"\n";
 
     applyNoClusteringInitialCondition();
     findCluster();
