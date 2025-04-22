@@ -8,23 +8,28 @@ ClusteringUserObject::validParams(){
     params.addRequiredParam<AuxVariableName>("metric_variable_name",
                                           "The name of the variable based on which clustering will be done");
     params.addClassDescription(" clustering object base that for amalgamation post processor"
-                               " or maybe another user obejct. I have to talk to Prof Wilson");
+                               " or maybe another user obejct. I have to talk to Paul about that");
 
     return params;
 }
 
 
 ClusteringUserObject::ClusteringUserObject(const InputParameters & parameters)
-        :GeneralUserObject(parameters),
-         _id_name(getParam<ExtraElementIDName>("id_name")),
-         _mesh(_fe_problem.mesh().getMesh()),
-         _metric_variable_name(getParam<AuxVariableName>("metric_variable_name")),
-         _metric_variable(_fe_problem.getVariable(_tid,_metric_variable_name)),
-         _auxiliary_system(_fe_problem.getAuxiliarySystem()),
-         _dof_map(_auxiliary_system.dofMap()),
-         _metric_variable_index(_auxiliary_system.getVariable(_tid, _metric_variable_name).number())
-         //it's not using the extra_integer set by the generated mesh generator
-{
+        : GeneralUserObject(parameters),
+          _id_name(getParam<ExtraElementIDName>("id_name")),
+          _mesh(_fe_problem.mesh().getMesh()),
+          _metric_variable_name(getParam<AuxVariableName>("metric_variable_name")),
+          _metric_variable(_fe_problem.getVariable(_tid, _metric_variable_name)),
+          _auxiliary_system(_fe_problem.getAuxiliarySystem()),
+          _dof_map(_auxiliary_system.dofMap()),
+          _metric_variable_index(_auxiliary_system.getVariable(_tid, _metric_variable_name).number()){
+
+    if (!_mesh.has_elem_integer(_id_name))
+    {
+        mooseError("Mesh does not have an extra element integer named '", _id_name, "'."
+                 " Ensure your mesh generator defines it with `extra_element_integers`.");
+    }
+    _extra_integer_index = _mesh.get_elem_integer_index(_id_name);
 }
 
 void ClusteringUserObject::execute(){
@@ -34,7 +39,6 @@ void ClusteringUserObject::execute(){
     findCluster();
 
 }
-
 
 Real
 ClusteringUserObject::getMetricData(const libMesh::Elem *elem) {
@@ -48,7 +52,7 @@ ClusteringUserObject::getMetricData(const libMesh::Elem *elem) {
 }
 
 void ClusteringUserObject::applyNoClusteringInitialCondition(){
-    for (auto &elem:_fe_problem.mesh().getMesh().active_element_ptr_range()){
+    for (auto &elem:_mesh.active_element_ptr_range()){
         elem->set_extra_integer(_extra_integer_index,not_visited);
     }
 }
@@ -57,7 +61,7 @@ void ClusteringUserObject::findCluster() {
 
     std::stack<libMesh::Elem *> neighbor_stack;
 
-    for (auto &elem: _fe_problem.mesh().getMesh().active_element_ptr_range()) {
+    for (auto &elem:_mesh.active_element_ptr_range()) {
         if (elem->get_extra_integer(_extra_integer_index) != not_visited) {
             continue;
         }
@@ -79,6 +83,7 @@ void ClusteringUserObject::findCluster() {
                         neighbor_elem->set_extra_integer(_extra_integer_index,
                                                          cluster_id);
                         neighbor_stack.push(neighbor_elem);
+                        //std::cout<<neighbor_elem->id()<<"\n";
                     }
                 }
             }
