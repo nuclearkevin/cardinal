@@ -2,18 +2,17 @@
 
 #include "ClusteringUserObject.h"
 
-class ThresholdHeuristicsUserObject: public ClusteringUserObject{
+class ThresholdHeuristicsUserObject : public ClusteringUserObject
+{
 
 public:
-
-    static InputParameters validParams();
-    ThresholdHeuristicsUserObject(const InputParameters & parameters);
+  static InputParameters validParams();
+  ThresholdHeuristicsUserObject(const InputParameters & parameters);
 
 protected:
-    virtual bool belongsToCluster(libMesh::Elem *elem, libMesh::Elem *neighbor_elem) override;
+  virtual bool belongsToCluster(libMesh::Elem * elem, libMesh::Elem * neighbor_elem) override;
 
 private:
-    double _threshold;
-    bool _value_crosses_threshold;
-
+  double _threshold;
+  bool _value_crosses_threshold;
 };

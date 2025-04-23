@@ -2,93 +2,105 @@
 #include "AuxiliarySystem.h"
 
 InputParameters
-ClusteringUserObject::validParams(){
-    InputParameters params = GeneralUserObject::validParams();
-    params.addRequiredParam<ExtraElementIDName>("id_name","initial value of the clustering ID");
-    params.addRequiredParam<AuxVariableName>("metric_variable_name",
-                                          "The name of the variable based on which clustering will be done");
-    params.addClassDescription(" clustering object base that for amalgamation post processor"
-                               " or maybe another user obejct. I have to talk to Paul about that");
+ClusteringUserObject::validParams()
+{
+  InputParameters params = GeneralUserObject::validParams();
+  params.addRequiredParam<ExtraElementIDName>("id_name", "initial value of the clustering ID");
+  params.addRequiredParam<AuxVariableName>(
+      "metric_variable_name", "The name of the variable based on which clustering will be done");
+  params.addClassDescription(" clustering object base that for amalgamation post processor"
+                             " or maybe another user obejct. I have to talk to Paul about that");
 
-    return params;
+  return params;
 }
-
 
 ClusteringUserObject::ClusteringUserObject(const InputParameters & parameters)
-        : GeneralUserObject(parameters),
-          _id_name(getParam<ExtraElementIDName>("id_name")),
-          _mesh(_fe_problem.mesh().getMesh()),
-          _metric_variable_name(getParam<AuxVariableName>("metric_variable_name")),
-          _metric_variable(_fe_problem.getVariable(_tid, _metric_variable_name)),
-          _auxiliary_system(_fe_problem.getAuxiliarySystem()),
-          _dof_map(_auxiliary_system.dofMap()),
-          _metric_variable_index(_auxiliary_system.getVariable(_tid, _metric_variable_name).number()){
+  : GeneralUserObject(parameters),
+    _id_name(getParam<ExtraElementIDName>("id_name")),
+    _mesh(_fe_problem.mesh().getMesh()),
+    _metric_variable_name(getParam<AuxVariableName>("metric_variable_name")),
+    _metric_variable(_fe_problem.getVariable(_tid, _metric_variable_name)),
+    _auxiliary_system(_fe_problem.getAuxiliarySystem()),
+    _dof_map(_auxiliary_system.dofMap()),
+    _metric_variable_index(_auxiliary_system.getVariable(_tid, _metric_variable_name).number())
+{
 
-    if (!_mesh.has_elem_integer(_id_name))
-    {
-        mooseError("Mesh does not have an extra element integer named ", _id_name, "."
-                 " Ensure your mesh generator defines it with extra_element_integers.");
-    }
-    _extra_integer_index = _mesh.get_elem_integer_index(_id_name);
+  if (!_mesh.has_elem_integer(_id_name))
+  {
+    mooseError("Mesh does not have an extra element integer named ",
+               _id_name,
+               "."
+               " Ensure your mesh generator defines it with extra_element_integers.");
+  }
+  _extra_integer_index = _mesh.get_elem_integer_index(_id_name);
 }
 
-void ClusteringUserObject::execute(){
-    //std::cout<<_id_name<<"\n";
+void
+ClusteringUserObject::execute()
+{
+  // std::cout<<_id_name<<"\n";
 
-    applyNoClusteringInitialCondition();
-    findCluster();
-
+  applyNoClusteringInitialCondition();
+  findCluster();
 }
 
 Real
-ClusteringUserObject::getMetricData(const libMesh::Elem *elem) {
+ClusteringUserObject::getMetricData(const libMesh::Elem * elem)
+{
 
-    std::vector<libMesh::dof_id_type> dof_indices;
-    std::vector<double> solution_value(1);
-    _dof_map.dof_indices(elem, dof_indices, _metric_variable_index);
-    _auxiliary_system.solution().get(dof_indices, solution_value);
+  std::vector<libMesh::dof_id_type> dof_indices;
+  std::vector<double> solution_value(1);
+  _dof_map.dof_indices(elem, dof_indices, _metric_variable_index);
+  _auxiliary_system.solution().get(dof_indices, solution_value);
 
-    return static_cast<Real>(solution_value[0]);
+  return static_cast<Real>(solution_value[0]);
 }
 
-void ClusteringUserObject::applyNoClusteringInitialCondition(){
-    for (auto &elem:_mesh.active_element_ptr_range()){
-        elem->set_extra_integer(_extra_integer_index,not_visited);
-    }
+void
+ClusteringUserObject::applyNoClusteringInitialCondition()
+{
+  for (auto & elem : _mesh.active_element_ptr_range())
+  {
+    elem->set_extra_integer(_extra_integer_index, not_visited);
+  }
 }
 
-void ClusteringUserObject::findCluster() {
+void
+ClusteringUserObject::findCluster()
+{
 
-    std::stack<libMesh::Elem *> neighbor_stack;
+  std::stack<libMesh::Elem *> neighbor_stack;
 
-    for (auto &elem:_mesh.active_element_ptr_range()) {
-        if (elem->get_extra_integer(_extra_integer_index) != not_visited) {
-            continue;
-        }
-        int cluster_id = elem->id();
-        neighbor_stack.push(elem);
-
-        while (!neighbor_stack.empty()) {
-            libMesh::Elem *current_elem = neighbor_stack.top();
-            neighbor_stack.pop();
-
-            for (unsigned int s = 0; s < current_elem->n_sides(); s++) {
-                libMesh::Elem *neighbor_elem = current_elem->neighbor_ptr(s);
-
-                if (neighbor_elem && neighbor_elem->get_extra_integer(
-                        _extra_integer_index) == not_visited) {
-                    if (belongsToCluster(current_elem, neighbor_elem)) {
-
-                        elem->set_extra_integer(_extra_integer_index, cluster_id);
-                        neighbor_elem->set_extra_integer(_extra_integer_index,
-                                                         cluster_id);
-                        neighbor_stack.push(neighbor_elem);
-                        //std::cout<<neighbor_elem->id()<<"\n";
-                    }
-                }
-            }
-        }
-
+  for (auto & elem : _mesh.active_element_ptr_range())
+  {
+    if (elem->get_extra_integer(_extra_integer_index) != not_visited)
+    {
+      continue;
     }
+    int cluster_id = elem->id();
+    neighbor_stack.push(elem);
 
+    while (!neighbor_stack.empty())
+    {
+      libMesh::Elem * current_elem = neighbor_stack.top();
+      neighbor_stack.pop();
+
+      for (unsigned int s = 0; s < current_elem->n_sides(); s++)
+      {
+        libMesh::Elem * neighbor_elem = current_elem->neighbor_ptr(s);
+
+        if (neighbor_elem && neighbor_elem->get_extra_integer(_extra_integer_index) == not_visited)
+        {
+          if (belongsToCluster(current_elem, neighbor_elem))
+          {
+
+            elem->set_extra_integer(_extra_integer_index, cluster_id);
+            neighbor_elem->set_extra_integer(_extra_integer_index, cluster_id);
+            neighbor_stack.push(neighbor_elem);
+            // std::cout<<neighbor_elem->id()<<"\n";
+          }
+        }
+      }
+    }
+  }
 }
