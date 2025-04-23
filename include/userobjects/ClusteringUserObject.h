@@ -1,7 +1,8 @@
 #pragma once
 
 #include "GeneralUserObject.h"
-#include "AuxiliarySystem.h"
+
+class AuxiliarySystem;
 
 class ClusteringUserObject: public GeneralUserObject{
 
