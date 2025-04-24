@@ -5,11 +5,10 @@ InputParameters
 ClusteringUserObject::validParams()
 {
   InputParameters params = GeneralUserObject::validParams();
-  params.addRequiredParam<ExtraElementIDName>("id_name", "initial value of the clustering ID");
+  params.addRequiredParam<ExtraElementIDName>("id_name", "extra_element_integer_id name");
   params.addRequiredParam<AuxVariableName>(
       "metric_variable_name", "The name of the variable based on which clustering will be done");
-  params.addClassDescription(" clustering object base that for amalgamation post processor"
-                             " or maybe another user obejct. I have to talk to Paul about that");
+  params.addClassDescription("Base clustering object that for other heuristic based user obejct. ");
 
   return params;
 }

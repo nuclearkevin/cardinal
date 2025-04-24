@@ -10,6 +10,8 @@ ThresholdHeuristicsUserObject::validParams()
   params.addRequiredParam<double>("threshold", " threshold ");
   params.addParam<bool>(
       "value_crosses_threshold", true, " return true of the value is more than the threshold");
+  params.addClassDescription("A special type of ClusterUserObject that applies threshold"
+                        "based heuristics on the element pairs.");
 
   return params;
 }
