@@ -37,14 +37,12 @@ ClusteringUserObject::ClusteringUserObject(const InputParameters & parameters)
 void
 ClusteringUserObject::execute()
 {
-  // std::cout<<_id_name<<"\n";
-
   applyNoClusteringInitialCondition();
   findCluster();
 }
 
 Real
-ClusteringUserObject::getMetricData(const libMesh::Elem * elem)
+ClusteringUserObject::getMetricData(const libMesh::Elem* elem)
 {
 
   std::vector<libMesh::dof_id_type> dof_indices;
@@ -68,7 +66,7 @@ void
 ClusteringUserObject::findCluster()
 {
 
-  std::stack<libMesh::Elem *> neighbor_stack;
+  std::stack<libMesh::Elem* > neighbor_stack;
 
   for (auto & elem : _mesh.active_element_ptr_range())
   {
@@ -81,12 +79,12 @@ ClusteringUserObject::findCluster()
 
     while (!neighbor_stack.empty())
     {
-      libMesh::Elem * current_elem = neighbor_stack.top();
+      libMesh::Elem* current_elem = neighbor_stack.top();
       neighbor_stack.pop();
 
       for (unsigned int s = 0; s < current_elem->n_sides(); s++)
       {
-        libMesh::Elem * neighbor_elem = current_elem->neighbor_ptr(s);
+        libMesh::Elem* neighbor_elem = current_elem->neighbor_ptr(s);
 
         if (neighbor_elem && neighbor_elem->get_extra_integer(_extra_integer_index) == not_visited)
         {
@@ -96,7 +94,7 @@ ClusteringUserObject::findCluster()
             elem->set_extra_integer(_extra_integer_index, cluster_id);
             neighbor_elem->set_extra_integer(_extra_integer_index, cluster_id);
             neighbor_stack.push(neighbor_elem);
-            // std::cout<<neighbor_elem->id()<<"\n";
+
           }
         }
       }
@@ -105,7 +103,7 @@ ClusteringUserObject::findCluster()
 }
 
 
-unsigned int
+int
 ClusteringUserObject::getExtraIntegerScore(libMesh::Elem* elem){
     return elem->get_extra_integer(_extra_integer_index);
 }

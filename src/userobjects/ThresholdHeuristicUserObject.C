@@ -23,7 +23,7 @@ ThresholdHeuristicsUserObject::ThresholdHeuristicsUserObject(const InputParamete
 {}
 
 bool
-ThresholdHeuristicsUserObject::belongsToCluster(libMesh::Elem * elem, libMesh::Elem * neighbor_elem)
+ThresholdHeuristicsUserObject::belongsToCluster(libMesh::Elem* elem, libMesh::Elem* neighbor_elem)
 {
 
   return _value_crosses_threshold

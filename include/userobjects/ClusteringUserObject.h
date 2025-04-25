@@ -14,7 +14,9 @@ public:
   virtual void execute() override;
   virtual void initialize() override {};
   virtual void finalize() override {};
-  unsigned int getExtraIntegerScore(libMesh::*elem);
+  int getExtraIntegerScore(libMesh::Elem* elem) ;
+  //this is necessary as we may want to create combined heuristics
+  //which would mimic the ComboMarker in moose
 
 protected:
   void applyNoClusteringInitialCondition();
@@ -30,5 +32,5 @@ protected:
   libMesh::DofMap & _dof_map;
   unsigned int _metric_variable_index;
   unsigned int _extra_integer_index = 0;
-  int not_visited = -1;
+  static const int not_visited = -1;
 };
