@@ -29,6 +29,7 @@
     [store_element_id]
         type=ExtraElementIDAux
         extra_id_name ="cluster_id"
+        execute_on = 'TIMESTEP_BEGIN'
         variable=cluster_id_aux
     []
 []
@@ -37,7 +38,6 @@
     [clustering]
         type = ThresholdHeuristicsUserObject
         execute_on = 'TIMESTEP_END'
-
         id_name = 'cluster_id'
         metric_variable_name = 'metric_var'
         threshold = 1.1

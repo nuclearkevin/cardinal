@@ -10,7 +10,7 @@ public:
   ThresholdHeuristicsUserObject(const InputParameters & parameters);
 
 protected:
-  virtual bool belongsToCluster(libMesh::Elem * elem, libMesh::Elem * neighbor_elem) override;
+  virtual bool belongsToCluster(libMesh::Elem* elem, libMesh::Elem* neighbor_elem) override;
 
 private:
   double _threshold;

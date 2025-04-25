@@ -14,12 +14,13 @@ public:
   virtual void execute() override;
   virtual void initialize() override {};
   virtual void finalize() override {};
+  unsigned int getExtraIntegerScore(libMesh::*elem);
 
 protected:
   void applyNoClusteringInitialCondition();
   void findCluster();
-  Real getMetricData(const Elem * elem);
-  virtual bool belongsToCluster(libMesh::Elem * base_element, libMesh::Elem * neighbor_elem) = 0;
+  Real getMetricData(const libMesh::Elem* elem);
+  virtual bool belongsToCluster(libMesh::Elem* base_element, libMesh::Elem* neighbor_elem) = 0;
 
   const ExtraElementIDName _id_name;
   libMesh::MeshBase & _mesh;

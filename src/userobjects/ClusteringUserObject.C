@@ -103,3 +103,9 @@ ClusteringUserObject::findCluster()
     }
   }
 }
+
+
+unsigned int
+ClusteringUserObject::getExtraIntegerScore(libMesh::Elem* elem){
+    return elem->get_extra_integer(_extra_integer_index);
+}
