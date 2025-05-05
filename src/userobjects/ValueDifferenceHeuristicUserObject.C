@@ -1,17 +1,19 @@
 #include "ValueDifferenceHeuristicUserObject.h"
 
+registerMooseObject("CardinalApp", ValueDifferenceHeuristicUserObject);
+
 InputParameters
 ValueDifferenceHeuristicUserObject::validParams(){
 
-    InputParameters params == ClusteringUserObject::validParams();
-    params.addRequiredParam<Real>("ValueDifferenceHeuristicUserObject","Lower limit of the range");
+    InputParameters params = ClusteringUserObject::validParams();
+    params.addRequiredParam<Real>("tolerance","value tolerance lim");
     params.addClassDescription("equal neighbor heuristic");
 
     return params;
 }
 
-ValueDifferenceHeuristicUserObject::ValueDifferenceHeuristicUserObject(const InputParameters & parameters):
-        ClusteringUserObject(parameters),
+ValueDifferenceHeuristicUserObject::ValueDifferenceHeuristicUserObject(const InputParameters & params):
+        ClusteringUserObject(params),
         _tolerance(getParam<Real>("tolerance"))
 {}
 
