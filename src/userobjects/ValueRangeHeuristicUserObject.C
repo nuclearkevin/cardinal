@@ -14,18 +14,18 @@ ValueRangeHeuristicUserObject::validParams(){
 
 ValueRangeHeuristicUserObject::ValueRangeHeuristicUserObject(const InputParameters & params):
                                 ClusteringUserObject(params),
-                                _tolerance_percentage(getParam<Real>("lower_limit")),
-                                _value(getParam<Real>("value"))
+                                _tolerance_percentage(getParam<Real>("tolerance_percentage")),
+                                _value(getParam<Real>("value")),
+                                _upper_limit ( (1 + _tolerance_percentage)*_value),
+                                _lower_limit ( (1 - _tolerance_percentage)*_value)
 {
-    _upper_limit = (1 + _tolerance_percentage)*_value;
-    _lower_limit = _tolerance_percentage*_value;
-
 }
+
 bool
 ValueRangeHeuristicUserObject::isInsideTheRange(libMesh::Elem* element){
 
-    return _lower_limit < getMetricData(element) and
-            getMetricData(element) < _upper_limit;
+    Real score = getMetricData(element);
+    return _lower_limit < score and score < _upper_limit;
 }
 bool
 

@@ -17,8 +17,8 @@ ErrorFractionHeuristicUserObject::ErrorFractionHeuristicUserObject(const InputPa
   : ClusteringUserObject(params),
     _upper_fraction(getParam<Real>("upper_fraction")),
     _lower_fraction(getParam<Real>("lower_fraction")),
-    _max (0),
-    _min(_std::numeric_limits<Real>::max())
+    _max(0),
+    _min(std::numeric_limits<Real>::max())
 {
 }
 
@@ -29,7 +29,7 @@ ErrorFractionHeuristicUserObject::extremesFinder()
   double score;
   for (auto & elem : _mesh.active_element_ptr_range())
   {
-    // should I add any nullptr check?
+    // should I add any nullptr check? no
     score = getMetricData(elem);
     if (_max < score)
     {
@@ -57,11 +57,11 @@ ErrorFractionHeuristicUserObject::execute()
 
 bool
 ErrorFractionHeuristicUserObject::belongsToCluster(libMesh::Elem * base_element,
-                                                   libMesh::Elem * neighbor_elem)
+                                                   libMesh::Elem * neighbor_element)
 {
 
-  double base_val = getMetricData(base_element);
-  double neighbor_val = getMetricData(neighbor_element);
-  return ((std::min(base_val, neighbor_val) > _upper_cut_off) ||
-          (std::max(base_val, neighbor_val) < _lower_cut_off));
+  Real base_score = getMetricData(base_element);
+  Real neighbor_score = getMetricData(neighbor_element);
+  return (base_score > _upper_cut_off and neighbor_score > _upper_cut_off) ||
+         (base_score < _lower_cut_off and neighbor_score < _lower_cut_off);
 }

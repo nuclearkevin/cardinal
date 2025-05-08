@@ -15,11 +15,10 @@ protected:
   virtual void execute() override;
   void extremesFinder();
 
-  Real _max;
-  Real _min;
-
   Real _upper_fraction;
   Real _lower_fraction;
+    Real _max;
+    Real _min;
 
   Real _upper_cut_off;
   Real _lower_cut_off;
