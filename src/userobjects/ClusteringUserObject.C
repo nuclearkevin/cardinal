@@ -86,7 +86,7 @@ ClusteringUserObject::findCluster()
       {
         libMesh::Elem* neighbor_elem = current_elem->neighbor_ptr(s);
 
-        if (neighbor_elem && neighbor_elem->get_extra_integer(_extra_integer_index) == not_visited)
+        if (neighbor_elem && neighbor_elem->active() && neighbor_elem->get_extra_integer(_extra_integer_index) == not_visited)
         {
           if (belongsToCluster(current_elem, neighbor_elem))
           {
