@@ -47,7 +47,7 @@ MeshTally::validParams()
 
   // The index of this tally into an array of mesh translations. Defaults to zero.
   params.addPrivateParam<unsigned int>("instance", 0);
-  params.addParam<std::string>("extra_integer_name",
+  params.addParam<std::string>("extra_integer_name","nothing",
                                "name of the extra integer id which"
                                "will be used for amalgamation");
 
@@ -67,14 +67,15 @@ MeshTally::MeshTally(const InputParameters & parameters)
   bool nu_scatter =
       std::find(_tally_score.begin(), _tally_score.end(), "nu-scatter") != _tally_score.end();
 
-  if (_mesh_tally_amalgamation_post_processing){
-    if (!_mesh.hasElementID(_extra_integer_name)){
-        mooseError("Extra element integer ID not found"
-               "For amalgamation you must provide an extra integer name that exists in "
-               "the mesh");
+    if (_mesh_tally_amalgamation_post_processing) {
+        if (!isParamValid("extra_integer_name") || _extra_integer_name == "nothing") {
+            mooseError("For amalgamation you must provide a valid 'extra_integer_name'");
+        }
+        if (!_mesh.hasElementID(_extra_integer_name)) {
+            mooseError("Extra element integer ID '", _extra_integer_name, "' not found in mesh");
+        }
+        _extra_integer_index = _mesh.getElementIDIndex(_extra_integer_name);
     }
-    _extra_integer_index = _mesh.getElementIDIndex(_extra_integer_name);
-  }
 
   // Error check the estimators.
   if (isParamValid("estimator"))

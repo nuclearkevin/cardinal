@@ -120,6 +120,6 @@ protected:
   unsigned int _extra_integer_index;
   std::unordered_map<unsigned int, unsigned int>_element_to_bin_mapping;
     /// Mesh tally amalgamation in the post processing
-    bool _mesh_tally_amalgamation_post_processing;
+  bool _mesh_tally_amalgamation_post_processing;
 
 };
