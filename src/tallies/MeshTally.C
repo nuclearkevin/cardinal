@@ -41,11 +41,12 @@ MeshTally::validParams()
       "Subdomains for which to add tallies in OpenMC. If not provided, this mesh "
       "tally will be applied over the entire mesh.");
 
+  params.addParam<bool>("mesh_tally_amalgamation_post_processing",
+                        false,"if we need to do mesh amalgamation "
+                              "in the post processing or not");
+
   // The index of this tally into an array of mesh translations. Defaults to zero.
   params.addPrivateParam<unsigned int>("instance", 0);
-  params.addParam<bool>("mesh_tally_amalgamatiom",
-                        false,
-                        "if user wants to do volumetric mesh tally amalgamation post processing");
   params.addParam<std::string>("extra_integer_name",
                                "name of the extra integer id which"
                                "will be used for amalgamation");
@@ -59,22 +60,20 @@ MeshTally::MeshTally(const InputParameters & parameters)
                                                        : Point(0.0, 0.0, 0.0)),
     _instance(getParam<unsigned int>("instance")),
     _use_dof_map(_is_adaptive || isParamValid("blocks")),
-    _mesh_tally_amalgamation_post_processing(getParam<bool>("mesh_tally_amalgamatiom")),
-    _extra_integer_name(getParam<std::string>("_extra_integer_name")),
-    _extra_integer_index(0)
+    _extra_integer_name(getParam<std::string>("extra_integer_name")),
+    _extra_integer_index(0),
+    _mesh_tally_amalgamation_post_processing(getParam<bool>("mesh_tally_amalgamation_post_processing"))
 {
   bool nu_scatter =
       std::find(_tally_score.begin(), _tally_score.end(), "nu-scatter") != _tally_score.end();
 
-  if (_mesh_tally_amalgamation_post_processing)
-  {
-    if (_mesh.hasElementID(_extra_integer_name))
-    {
-      _extra_integer_index = _mesh.getElementIDIndex(_extra_integer_name);
-    }
-    mooseError("Extra element integer ID not found"
+  if (_mesh_tally_amalgamation_post_processing){
+    if (!_mesh.hasElementID(_extra_integer_name)){
+        mooseError("Extra element integer ID not found"
                "For amalgamation you must provide an extra integer name that exists in "
                "the mesh");
+    }
+    _extra_integer_index = _mesh.getElementIDIndex(_extra_integer_name);
   }
 
   // Error check the estimators.
@@ -246,7 +245,9 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
                              bool norm_by_src_rate)
 {
   Real total = 0.0;
-
+  bool error_propagation_in_cluster = false;
+  if (tally_vals != _current_raw_tally or tally_vals!= _current_tally)
+      error_propagation_in_cluster = true;
   unsigned int mesh_offset = _instance * _mesh_filter->n_bins();
   for (unsigned int ext_bin = 0; ext_bin < _num_ext_filter_bins; ++ext_bin)
   {
@@ -259,14 +260,11 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
       libMesh::Elem * elem_ptr = _mesh.queryElemPtr(elem_id);
 
       if (tracking_flag[e] == true)
-      {
         continue;
-      }
 
       if (_mesh_tally_amalgamation_post_processing and
           tracking_flag[e] == false /* not previously visited*/ and
-          elem_ptr->get_extra_integer(_extra_integer_index) !=
-              -1 and // if the element belongs to a cluster
+          elem_ptr->get_extra_integer(_extra_integer_index) != -1 and // if the element belongs to a cluster
           elem_ptr->active() and
           elem_ptr)
       {
@@ -276,8 +274,15 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
         cluster_stack.push(elem_ptr);
         clustering_element_bag.push_back(elem_ptr);
 
-        Real cluster_volume = elem_ptr->volume();
         tracking_flag[e] = true;
+        Real unnormalized_tally = tally_vals[local_score](ext_bin * _mesh_filter->n_bins() +
+                                                            _element_to_bin_mapping[elem_ptr->id()]);
+        Real total_volume_of_the_cluster = elem_ptr->volume();
+        Real score = unnormalized_tally * total_volume_of_the_cluster * total_volume_of_the_cluster;
+
+        if (error_propagation_in_cluster == true){
+             score *= total_volume_of_the_cluster;
+        }
         while (cluster_stack.size() > 0)
         {
 
@@ -286,30 +291,44 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
 
           for (unsigned int side_id = 0; current_elem->n_sides(); side_id++)
           {
-            if (current_elem->get_extra_integer(_extra_integer_index) != -1 and current_elem and
+            if (current_elem->get_extra_integer(_extra_integer_index) != -1 and
+                current_elem and
                 current_elem->active())
+            {
+                // part of a cluster
+                Real current_element_volume = current_elem->volume();
+                total_volume_of_the_cluster += current_element_volume;
 
-              // part of a cluster
-              cluster_volume += current_elem->volume();
-            cluster_stack.push(current_elem);
-            clustering_element_bag.push_back(current_elem);
+                unnormalized_tally = tally_vals[local_score](ext_bin * _mesh_filter->n_bins() + _element_to_bin_mapping[elem_ptr->id()]);
+                score +=  unnormalized_tally * current_element_volume;
 
-            tracking_flag[_element_to_bin_mapping[current_elem->id()]] = true;
+                if (error_propagation_in_cluster == true)
+                    score+=  unnormalized_tally * current_element_volume * current_element_volume;
+                else
+                    score+=  unnormalized_tally * current_element_volume;
+
+                cluster_stack.push(current_elem);
+                clustering_element_bag.push_back(current_elem);
+                tracking_flag[_element_to_bin_mapping[current_elem->id()]] = true;
+            }
           }
         }
+        Real volumetric_avg_score = score / total_volume_of_the_cluster;
+
+        if (error_propagation_in_cluster == true)
+            volumetric_avg_score /= sqrt(score);
 
         for (auto element : clustering_element_bag)
         {
-          Real unnormalized_tally = tally_vals[local_score](ext_bin * _mesh_filter->n_bins() +
-                                                            _element_to_bin_mapping[element->id()]);
-          Real volumetric_tally = unnormalized_tally * element->volume() / cluster_volume;
-          volumetric_tally *= norm_by_src_rate
+          /*but now I have treat flux and uncertinity differently */
+          unnormalized_tally = tally_vals[local_score](ext_bin * _mesh_filter->n_bins() + _element_to_bin_mapping[element->id()]);
+          volumetric_avg_score *= norm_by_src_rate
                                   ? _openmc_problem.tallyMultiplier(global_score) /
                                         _mesh_template->volume(e) * _openmc_problem.scaling() *
                                         _openmc_problem.scaling() * _openmc_problem.scaling()
                                   : 1.0;
           total += _ext_bins_to_skip[ext_bin] ? 0.0 : unnormalized_tally;
-          fillElementalAuxVariable(var, {elem_id}, volumetric_tally);
+          fillElementalAuxVariable(var, {elem_id}, volumetric_avg_score);
         }
       }
 
