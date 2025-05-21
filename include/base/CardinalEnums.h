@@ -35,9 +35,11 @@ MooseEnum getInitialPropertiesEnum();
 MultiMooseEnum getTallyScoreEnum();
 MultiMooseEnum getParticleFilterEnums();
 MooseEnum getSingleTallyScoreEnum();
+MooseEnum getSingleParticleFilterEnum();
 MooseEnum getEnergyGroupsEnum();
 MooseEnum getNekMeshEnum();
 MooseEnum getFilterTypeEnum();
+MooseEnum getStatsOutputEnum();
 
 namespace nek_mesh
 {
@@ -141,8 +143,7 @@ namespace tally
 enum TallyTypeEnum
 {
   cell,
-  mesh,
-  none
+  mesh
 };
 
 /// Type of estimator to use for OpenMC tallies
@@ -237,6 +238,17 @@ enum EigenvalueEnum
   combined
 };
 } // namespace eigenvalue
+
+namespace statistics
+{
+/// The type of output for both the k-eigenvalue and kinetics parameters.
+enum OutputEnum
+{
+  Mean,
+  StDev,
+  RelError
+};
+} // namespace statistics
 
 namespace relaxation
 {

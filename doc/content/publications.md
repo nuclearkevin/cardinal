@@ -157,6 +157,11 @@ A.J. Novak, P. Shriwise, R. Rahaman, P.K. Romano, E. Merzari, and D. Gaston,
 ["Coupled Monte Carlo Transport and Conjugate Heat Transfer for Wire-Wrapped Bundles Within the MOOSE Framework"](https://www.researchgate.net/publication/359121160_COUPLED_MONTE_CARLO_TRANSPORT_AND_CONJUGATE_HEAT_TRANSFER_FOR_WIRE-WRAPPED_BUNDLES_WITHIN_THE_MOOSE_FRAMEWORK)
 *Proceedings of Nureth* (2022)
 
+# Space Nuclear Reactors
+
+M. Dalinger, E. Merzari, T. Nguyen, M. Seneca, and R. Martineau, ["Multiphysics Modeling of SNAP 10A/2 Space Reactor with Cardinal"](https://www.ans.org/meetings/nets2025/session/view-2957/)
+*Proceedings of NETS* (2025)
+
 # Fusion Devices
 
 A.J. Novak, H. Brooks, P. Shriwise, A. Hegazy, and A. Davis,
@@ -188,6 +193,12 @@ A. Huxford, V. Petrov, A. Manera, V. Coppo Leite, E. Merzari, and L. Zou
 A. Chaube, A. Novak, H. Yuan, E. Merzari, D.R. Shaver, P.F. Fischer, and C. Brooks,
 ["A Preliminary Fluid-Structure Coupling of NekRS and MOOSE via Cardinal"](https://ui.adsabs.harvard.edu/abs/2023arXiv230811777C/abstract)
 *Proceedings of M&C* (2023)
+
+# Adaptive Mesh Refinement
+
+K. C. Sawatzky, E. W. Ahammed, P. P.H. Wilson, P. C. Shriwise, P. K. Romano, A. J. Novak,
+["Adaptive Mesh Refinement Applied to Unstructured Mesh Tallies in Cardinal-OpenMC"](https://www.ans.org/meetings/ac2025/sessions/attachment/paper-12816/)
+*Proceedings of the ANS Annual Meeting* (2025)
 
 # AI/ML
 

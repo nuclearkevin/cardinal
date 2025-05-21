@@ -59,7 +59,7 @@ getOperationEnum()
 MooseEnum
 getTallyTypeEnum()
 {
-  return MooseEnum("cell mesh none");
+  return MooseEnum("cell mesh");
 }
 
 MooseEnum
@@ -115,6 +115,12 @@ getSingleTallyScoreEnum()
 }
 
 MooseEnum
+getSingleParticleFilterEnum()
+{
+  return MooseEnum("neutron photon electron positron");
+}
+
+MooseEnum
 getEnergyGroupsEnum()
 {
   return MooseEnum(
@@ -127,4 +133,10 @@ MooseEnum
 getFilterTypeEnum()
 {
   return MooseEnum("cell material universe mesh none", "none");
+}
+
+MooseEnum
+getStatsOutputEnum()
+{
+  return MooseEnum("mean std_dev rel_err", "mean");
 }

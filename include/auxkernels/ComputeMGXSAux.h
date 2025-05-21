@@ -18,42 +18,26 @@
 
 #pragma once
 
-#include "GeneralPostprocessor.h"
-
-#include "OpenMCBase.h"
-#include "CardinalEnums.h"
+#include "OpenMCAuxKernel.h"
 
 /**
- * Get the k-effective eigenvalue standard deviation computed by OpenMC.
+ * This auxkernel computes an arbitrary multi-group cross
+ * section given a group-wise reaction rate and a group-wise
+ * scalar flux.
  */
-class KStandardDeviation : public GeneralPostprocessor, public OpenMCBase
+class ComputeMGXSAux : public OpenMCAuxKernel
 {
 public:
   static InputParameters validParams();
 
-  KStandardDeviation(const InputParameters & parameters);
-
-  virtual void initialize() override {}
-  virtual void execute() override {}
-
-  virtual Real getValue() const override;
+  ComputeMGXSAux(const InputParameters & parameters);
 
 protected:
-  /**
-   * Compute standard deviation
-   * @param[in] mean mean
-   * @param[in] sum_sq sum squared
-   * @return standard deviation given N OpenMC realizations
-   */
-  Real stdev(const double & mean, const double & sum_sq) const;
+  virtual Real computeValue() override;
 
-  /**
-   * Type of k-effective standard deviation value to report. Options:
-   * collision, absorption, tracklength, and combined (default).
-   *
-   * The combined k-effective estimate is a minimum variance estimate
-   * of k-effective based on a linear combination of the collision, absorption,
-   * and tracklength estimates.
-   */
-  const eigenvalue::EigenvalueEnum _type;
+  /// The reaction rates for computing the MGXS.
+  std::vector<const VariableValue *> _mg_reaction_rates;
+
+  /// The normalization factor. Normally the group-wise scalar flux.
+  std::vector<const VariableValue *> _norm_factors;
 };

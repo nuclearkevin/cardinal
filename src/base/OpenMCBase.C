@@ -29,13 +29,21 @@ OpenMCBase::validParams()
   return params;
 }
 
-OpenMCBase::OpenMCBase(const MooseObject * moose_object, const InputParameters & parameters)
+OpenMCBase::OpenMCBase(const ParallelParamObject * moose_object, const InputParameters & parameters)
   : _openmc_problem(
         dynamic_cast<OpenMCCellAverageProblem *>(&moose_object->getMooseApp().feProblem()))
 {
   if (!_openmc_problem)
     mooseError(moose_object->type() +
                " can only be used with problems of type 'OpenMCCellAverageProblem'!");
+}
+
+Real
+OpenMCBase::stdev(const double & mean, const double & sum_sq, unsigned int realizations) const
+{
+  return realizations > 1
+             ? std::sqrt(std::max(0.0, (sum_sq / realizations - mean * mean) / (realizations - 1)))
+             : 0.0;
 }
 
 #endif

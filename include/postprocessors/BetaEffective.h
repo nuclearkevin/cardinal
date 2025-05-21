@@ -16,30 +16,23 @@
 /*                 See LICENSE for full restrictions                */
 /********************************************************************/
 
-#pragma once
+#include "GeneralPostprocessor.h"
 
-#include "CardinalEnums.h"
-#include "FilterBase.h"
+#include "OpenMCBase.h"
 
-class EnergyFilterBase : public FilterBase
+class BetaEffective : public GeneralPostprocessor, public OpenMCBase
 {
 public:
   static InputParameters validParams();
 
-  EnergyFilterBase(const InputParameters & parameters);
+  BetaEffective(const InputParameters & parameters);
 
-  /**
-   * A function which converts a GroupStructureEnum into the vector representation of the group
-   * structure.
-   * @param[in] structure the requested group structure
-   * @return the energy gruop boundaries
-   */
-  std::vector<double> getGroupBoundaries(energyfilter::GroupStructureEnum group_structure);
+  virtual void initialize() override {}
+  virtual void execute() override {}
+
+  virtual Real getValue() const override;
 
 protected:
-  /// The energy bounds used to build bins.
-  std::vector<Real> _energy_bnds;
-
-  /// Whether or not to reverse the ordering of energy bins during output.
-  const bool _reverse_bins;
+  /// The value of the kinetics parameter to output.
+  const statistics::OutputEnum _output;
 };
