@@ -23,10 +23,13 @@
 /**
  * A class which computes a Figure of Merit (FoM) for a tally quantity.
  * This can be one of several candidate FoMs:
- * - The variance reduction FoM:   FoM = 1 / (T * sigma^2)
- * - The relative discrepancy FoM: FoM = ref / (T * sigma^2 * |var - ref|)
- * - The absolute discrepancy FoM: FoM = 1 / (T * sigma^2 * |var - ref|)
- * Optionally, the FoM may be divided by the element volume.
+ * - The variance reduction FoM:   $FoM = 1 / (T * \sigma^2)$
+ * - The relative discrepancy FoM: $FoM = u_{ref} / (T * \sigma^2 * |u - u_{ref}|)$
+ * - The absolute discrepancy FoM: $FoM = 1 / (T * \sigma^2 * |u - u_{ref}|)$
+ * where $T$ is the OpenMC simulation time, $\sigma$ is the volumetric standard
+ * deviation of the tally, $u_{ref}$ is a reference solution, and $u$ is the tally
+ * value. This object quantifies the performance of algorithms for variance reduction or
+ * adaptive mesh refinement.
  */
 class TallyFoMAux : public OpenMCAuxKernel
 {
