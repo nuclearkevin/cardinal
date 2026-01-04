@@ -27,7 +27,7 @@ TallyFoMAux::validParams()
 {
   auto params = OpenMCAuxKernel::validParams();
   params.addClassDescription(
-      "An auxkernel which a Figure of Merit (FoM) for a tally variable.");
+      "An auxkernel which computes a Figure of Merit (FoM) for a tally.");
   params.addCoupledVar(
       "tally_value",
       "The variable containing the value of the tally. TallyFoMAux "
