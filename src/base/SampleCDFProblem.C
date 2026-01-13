@@ -87,8 +87,6 @@ SampleCDFProblem::externalSolve()
   // Reset "tally" data structures.
   _pseudo_tally_sum.clear();
   _pseudo_tally_sum.resize(num_active_elem, 0.0);
-  //_pseudo_tally_sum_sq.clear();
-  //_pseudo_tally_sum_sq.resize(num_active_elem, 0.0);
 
   // Reset mapping data structures.
   _bin_to_elem_map.clear();

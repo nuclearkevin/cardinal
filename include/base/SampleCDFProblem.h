@@ -67,7 +67,6 @@ protected:
 
   /// Storage for the intermediate "tally" results.
   std::vector<Real> _pseudo_tally_sum;
-  std::vector<Real> _pseudo_tally_sum_sq;
 
   /// A mapping between tally bins (active elements) and all elements.
   std::vector<dof_id_type> _bin_to_elem_map;
