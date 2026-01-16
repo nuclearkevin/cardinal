@@ -50,25 +50,8 @@ SampleCDFProblem::validParams()
 SampleCDFProblem::SampleCDFProblem(const InputParameters & parameters)
   : CardinalProblem(parameters),
     _samples(getParam<unsigned int>("samples")),
-    _x_cdf(getFunction("x_coord_cdf")),
     _result_var_name(getParam<std::string>("result_var_name"))
 {
-  if (mesh().spatialDimension() > 2)
-  {
-    if (!isParamValid("y_coord_cdf"))
-      paramError("y_coord_cdf", "In 2D or 3D, y_coord_cdf is required!");
-    else
-      _y_cdf = &getFunction("y_coord_cdf");
-
-    if (mesh().spatialDimension() > 3)
-    {
-      if (!isParamValid("z_coord_cdf"))
-        paramError("z_coord_cdf", "In 3D, z_coord_cdf is required!");
-      else
-        _z_cdf = &getFunction("z_coord_cdf");
-    }
-  }
-
   for (THREAD_ID tid = 0; tid < libMesh::n_threads(); ++tid)
   {
     _rng.emplace_back(tid);
@@ -105,7 +88,7 @@ SampleCDFProblem::externalSolve()
   {
     const auto tid = omp_get_thread_num();
     // Treat time (t) as the uniform random number.
-    const Real x = _x_cdf.value(sampleNumber(tid), Point(0.0, 0.0, 0.0));
+    const Real x = _x_cdf->value(sampleNumber(tid), Point(0.0, 0.0, 0.0));
     const Real y = _y_cdf ? _y_cdf->value(sampleNumber(tid), Point(0.0, 0.0, 0.0)) : 0.0;
     const Real z = _z_cdf ? _z_cdf->value(sampleNumber(tid), Point(0.0, 0.0, 0.0)) : 0.0;
 
@@ -156,6 +139,23 @@ SampleCDFProblem::syncSolutions(Direction direction)
 void
 SampleCDFProblem::addExternalVariables()
 {
+  _x_cdf = &getFunction(getParam<FunctionName>("x_coord_cdf"));
+  if (mesh().spatialDimension() > 2)
+  {
+    if (!isParamValid("y_coord_cdf"))
+      paramError("y_coord_cdf", "In 2D or 3D, y_coord_cdf is required!");
+    else
+      _y_cdf = &getFunction(getParam<FunctionName>("y_coord_cdf"));
+
+    if (mesh().spatialDimension() > 3)
+    {
+      if (!isParamValid("z_coord_cdf"))
+        paramError("z_coord_cdf", "In 3D, z_coord_cdf is required!");
+      else
+        _z_cdf = &getFunction(getParam<FunctionName>("z_coord_cdf"));
+    }
+  }
+
   auto var_params = _factory.getValidParams("MooseVariable");
   var_params.set<MooseEnum>("family") = "MONOMIAL";
   var_params.set<MooseEnum>("order") = "CONSTANT";
@@ -171,4 +171,10 @@ SampleCDFProblem::sampleNumber(THREAD_ID tid)
 {
   auto dis = std::uniform_real_distribution<Real>(0.0, 1.0);
   return dis(_rng[tid]);
+}
+
+bool
+SampleCDFProblem::solverSystemConverged(const unsigned int)
+{
+  return true;
 }

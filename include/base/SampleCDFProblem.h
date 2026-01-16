@@ -44,6 +44,11 @@ public:
    */
   virtual void addExternalVariables() override;
 
+  /**
+   * TODO
+   */
+  virtual bool solverSystemConverged(const unsigned int) override;
+
 protected:
   /**
    * TODO
@@ -54,7 +59,7 @@ protected:
   const unsigned int & _samples;
 
   /// The x position CDF.
-  const Function & _x_cdf;
+  const Function * _x_cdf;
 
   /// The y position CDF.
   const Function * _y_cdf;
