@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "OpenMCAuxKernel.h"
+#include "AuxKernel.h"
 
 /**
  * A class which computes a Figure of Merit (FoM) for a tally quantity.
@@ -31,7 +31,7 @@
  * value. This object quantifies the performance of algorithms for variance reduction or
  * adaptive mesh refinement.
  */
-class TallyFoMAux : public OpenMCAuxKernel
+class TallyFoMAux : public AuxKernel
 {
 public:
   static InputParameters validParams();

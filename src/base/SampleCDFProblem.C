@@ -20,6 +20,7 @@
 
 #include "Function.h"
 
+#include <chrono>
 #include <omp.h>
 
 registerMooseObject("CardinalApp", SampleCDFProblem);
@@ -50,8 +51,12 @@ SampleCDFProblem::validParams()
 SampleCDFProblem::SampleCDFProblem(const InputParameters & parameters)
   : CardinalProblem(parameters),
     _samples(getParam<unsigned int>("samples")),
-    _result_var_name(getParam<std::string>("result_var_name"))
+    _result_var_name(getParam<std::string>("result_var_name")),
+    _time(0.0)
 {
+  if (n_processors() > 1)
+    mooseError("SampleCDFProblem cannot be executed with MPI!");
+
   for (THREAD_ID tid = 0; tid < libMesh::n_threads(); ++tid)
   {
     _rng.emplace_back(tid);
@@ -64,12 +69,16 @@ SampleCDFProblem::SampleCDFProblem(const InputParameters & parameters)
 void
 SampleCDFProblem::externalSolve()
 {
+  auto t_start = std::chrono::high_resolution_clock::now();
+
   auto msh = mesh().getMeshPtr();
   const auto num_active_elem = mesh().nActiveElem();
 
   // Reset "tally" data structures.
   _pseudo_tally_sum.clear();
   _pseudo_tally_sum.resize(num_active_elem, 0.0);
+  _pseudo_tally_sum_sq.clear();
+  _pseudo_tally_sum_sq.resize(num_active_elem, 0.0);
 
   // Reset mapping data structures.
   _bin_to_elem_map.clear();
@@ -87,10 +96,13 @@ SampleCDFProblem::externalSolve()
   for (unsigned int i = 0; i < _samples; ++i)
   {
     const auto tid = omp_get_thread_num();
+    const auto p = sampleNumber(tid);
+    const auto pp = p * p;
+
     // Treat time (t) as the uniform random number.
-    const Real x = _x_cdf->value(sampleNumber(tid), Point(0.0, 0.0, 0.0));
-    const Real y = _y_cdf ? _y_cdf->value(sampleNumber(tid), Point(0.0, 0.0, 0.0)) : 0.0;
-    const Real z = _z_cdf ? _z_cdf->value(sampleNumber(tid), Point(0.0, 0.0, 0.0)) : 0.0;
+    const Real x = _x_cdf->value(p, Point(0.0, 0.0, 0.0));
+    const Real y = _y_cdf ? _y_cdf->value(p, Point(0.0, 0.0, 0.0)) : 0.0;
+    const Real z = _z_cdf ? _z_cdf->value(p, Point(0.0, 0.0, 0.0)) : 0.0;
 
     // Sample the mesh to find a bin.
     const auto elem = (*_pl[tid])(Point(x, y, z));
@@ -101,24 +113,30 @@ SampleCDFProblem::externalSolve()
     const auto bin = _elem_to_bin_map[elem->id()];
     #pragma omp atomic
     _pseudo_tally_sum[bin] += 1.0;
+
+    #pragma omp atomic
+    _pseudo_tally_sum_sq[bin] += 1.0;
   }
 
-  // Normalize the results by the number of samples.
-  #pragma omp parallel for
-  for (unsigned int bin = 0; bin < _pseudo_tally_sum.size(); ++bin)
-    _pseudo_tally_sum[bin] /= static_cast<Real>(_samples);
+  auto t_end = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t_end - t_start).count();
+  _time += 1e-6 * static_cast<Real>(duration);
 }
 
 void
 SampleCDFProblem::syncSolutions(Direction direction)
 {
-  _aux->serializeSolution();
-
   switch (direction)
   {
     case ExternalProblem::Direction::TO_EXTERNAL_APP:
       break;
     case ExternalProblem::Direction::FROM_EXTERNAL_APP:
+    {
+      auto t_start = std::chrono::high_resolution_clock::now();
+      _aux->serializeSolution();
+
+      const auto realizations = static_cast<Real>(_samples);
+
       #pragma omp parallel for
       for (unsigned int bin = 0; bin < _pseudo_tally_sum.size(); ++bin)
       {
@@ -126,19 +144,34 @@ SampleCDFProblem::syncSolutions(Direction direction)
         if (!elem)
           continue;
 
-        auto dof_idx = elem->dof_number(_aux->number(), _var_number, 0);
-        _aux->solution().set(dof_idx, _pseudo_tally_sum[bin]);
-      }
-      break;
-  }
+        const auto mean    = _pseudo_tally_sum[bin] / realizations;
+        const auto sum_sq  = _pseudo_tally_sum_sq[bin];
+        const auto std_dev = std::sqrt(std::max(0.0, (sum_sq / realizations - mean * mean) / (realizations - 1)));
 
-  _aux->solution().close();
-  _aux->system().update();
+        auto mean_dof_idx = elem->dof_number(_aux->number(), _mean_var_number, 0);
+        _aux->solution().set(mean_dof_idx, mean / elem->volume());
+
+        auto std_dev_dof_idx = elem->dof_number(_aux->number(), _std_dev_var_number, 0);
+        _aux->solution().set(std_dev_dof_idx, std_dev / elem->volume());
+      }
+
+      _aux->solution().close();
+      _aux->system().update();
+
+      auto t_end = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t_end - t_start).count();
+      _time += 1e-6 * static_cast<Real>(duration);
+
+      setPostprocessorValueByName("cdf_sampler_runtime", _time);
+    }
+    break;
+  }
 }
 
 void
 SampleCDFProblem::addExternalVariables()
 {
+  // Fetch the inverted CDFs to sample positions.
   _x_cdf = &getFunction(getParam<FunctionName>("x_coord_cdf"));
   if (mesh().spatialDimension() > 2)
   {
@@ -156,14 +189,25 @@ SampleCDFProblem::addExternalVariables()
     }
   }
 
+  // Add a post-processor to store the "simulation" time
+  auto pp_params = _factory.getValidParams("Receiver");
+  addPostprocessor("Receiver", "cdf_sampler_runtime", pp_params);
+
+  // Add a variable to store the volumetric mean value.
   auto var_params = _factory.getValidParams("MooseVariable");
   var_params.set<MooseEnum>("family") = "MONOMIAL";
   var_params.set<MooseEnum>("order") = "CONSTANT";
 
-  checkDuplicateVariableName(_result_var_name, "test");
-  addAuxVariable("MooseVariable", _result_var_name, var_params);
+  checkDuplicateVariableName(_result_var_name + "_mean", "test");
+  addAuxVariable("MooseVariable", _result_var_name + "_mean", var_params);
 
-  _var_number = _aux->getFieldVariable<Real>(0, _result_var_name).number();
+  _mean_var_number = _aux->getFieldVariable<Real>(0, _result_var_name + "_mean").number();
+
+  // Add a variable to store the volumetric standard deviation value.
+  checkDuplicateVariableName(_result_var_name + "_std_dev", "test");
+  addAuxVariable("MooseVariable", _result_var_name + "_std_dev", var_params);
+
+  _std_dev_var_number = _aux->getFieldVariable<Real>(0, _result_var_name + "_std_dev").number();
 }
 
 Real

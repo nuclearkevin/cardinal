@@ -72,6 +72,7 @@ protected:
 
   /// Storage for the intermediate "tally" results.
   std::vector<Real> _pseudo_tally_sum;
+  std::vector<Real> _pseudo_tally_sum_sq;
 
   /// A mapping between tally bins (active elements) and all elements.
   std::vector<dof_id_type> _bin_to_elem_map;
@@ -85,6 +86,15 @@ protected:
   /// Point locators.
   std::vector<std::unique_ptr<libMesh::PointLocatorBase>> _pl;
 
-  /// The numer associated with the variable added.
-  unsigned int _var_number;
+  /// The number associated with the mean variable added.
+  unsigned int _mean_var_number;
+
+  /// The number associated with the standard deviation variable added.
+  unsigned int _std_dev_var_number;
+
+  /**
+   * Time spent computing and storing the solution. This is accumulated
+   * over all time / adaptivity steps.
+   */
+  Real _time;
 };
