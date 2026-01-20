@@ -42,7 +42,7 @@ protected:
   virtual Real computeValue() override;
 
   /// The variable containing the tally score.
-  const VariableValue * _tally_val;
+  const VariableValue & _tally_val;
 
   /// The variables containing the tally score standard deviation.
   const VariableValue & _tally_std_dev;

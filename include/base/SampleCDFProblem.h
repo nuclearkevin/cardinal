@@ -53,19 +53,45 @@ protected:
   /**
    * TODO
    */
+  Point rejectSampleCoordPDF(THREAD_ID tid);
+
+  /**
+   * TODO
+   */
   Real sampleNumber(THREAD_ID tid);
 
   /// The number of Monte Carlo samples required when sampling the given CDF.
   const unsigned int & _samples;
 
+  /// The number of retries to use when rejection sampling.
+  const unsigned int & _max_num_attempts;
+
   /// The x position CDF.
-  const Function * _x_cdf;
+  const Function * _x_pdf;
+
+  /// The x-coordinate blanket constant for rejection sampling.
+  const Real & _x_blanket;
 
   /// The y position CDF.
-  const Function * _y_cdf;
+  const Function * _y_pdf;
+
+  /// The y-coordinate blanket constant for rejection sampling.
+  Real _y_blanket;
 
   /// The z position CDF.
-  const Function * _z_cdf;
+  const Function * _z_pdf;
+
+  /// The z-coordinate blanket constant for rejection sampling.
+  Real _z_blanket;
+
+  /// Minimum bounding box corner for rejection sampling.
+  const Point & _bb_min;
+
+  /// Maximum bounding box corner for rejection sampling.
+  const Point & _bb_max;
+
+  /// The extents of the bounding box.
+  const Point _bb_extents;
 
   /// The results variable name.
   const std::string & _result_var_name;
@@ -91,6 +117,9 @@ protected:
 
   /// The number associated with the standard deviation variable added.
   unsigned int _std_dev_var_number;
+
+  /// The number associated with the relative error variable added.
+  unsigned int _rel_var_number;
 
   /**
    * Time spent computing and storing the solution. This is accumulated

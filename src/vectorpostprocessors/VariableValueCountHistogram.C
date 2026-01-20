@@ -28,10 +28,10 @@ VariableValueCountHistogram::validParams()
   auto params = ElementVectorPostprocessor::validParams();
   params.addClassDescription(
       "Compute a histogram of element counts binned according to variable values.");
-  params.addParam<unsigned int>("bin_number", 50, "Number of histogram bins");
   params.addCoupledVar("variable", "Variable to bin element counts by. Must be of type CONSTANT MONOMIAL.");
-  params.addRequiredParam<Real>("min_value", "Minimum variable value");
-  params.addRequiredParam<Real>("max_value", "Maximum variable value");
+  params.addParam<unsigned int>("bin_number", 50, "Number of histogram bins");
+  params.addRequiredParam<PostprocessorName>("min_value", "A post-processor computing the minimum variable value.");
+  params.addRequiredParam<PostprocessorName>("max_value", "A post-processor computing the maximum variable value.");
 
   return params;
 }
@@ -39,9 +39,8 @@ VariableValueCountHistogram::validParams()
 VariableValueCountHistogram::VariableValueCountHistogram(const InputParameters & parameters)
   : ElementVectorPostprocessor(parameters),
     _nbins(getParam<unsigned int>("bin_number")),
-    _min_value(getParam<Real>("min_value")),
-    _max_value(getParam<Real>("max_value")),
-    _delta_var((_max_value - _min_value) / _nbins),
+    _min_value(getPostprocessorValue("min_value")),
+    _max_value(getPostprocessorValue("max_value")),
     _value(coupledValue("variable")),
     _bin_center(declareVector(coupledName("variable"))),
     _counts(declareVector("counts"))
@@ -56,8 +55,6 @@ VariableValueCountHistogram::VariableValueCountHistogram(const InputParameters &
 
   // initialize the bin center value vector
   _bin_center.resize(_nbins);
-  for (unsigned i = 0; i < _nbins; ++i)
-    _bin_center[i] = (i + 0.5) * _delta_var + _min_value;
 }
 
 void
@@ -65,6 +62,10 @@ VariableValueCountHistogram::initialize()
 {
   // Reset the histogram.
   _counts.assign(_nbins, 0.0);
+
+  _delta_var = (_max_value - _min_value) / _nbins;
+  for (unsigned i = 0; i < _nbins; ++i)
+    _bin_center[i] = (i + 0.5) * _delta_var + _min_value;
 }
 
 void
@@ -72,7 +73,7 @@ VariableValueCountHistogram::execute()
 {
   // Compute the bin index. There should be a single elemental DoF as the variable is
   // a CONSTANT MONOMIAL field variable.
-  int bin = (_value[0] - _min_value) / _delta_var;
+  int bin = (_value[0] - _min_value * (1.0 + 1e-6)) / _delta_var;
 
   // Increment the bin in the histogram iff the index exists.
   if (bin >= 0 && static_cast<unsigned int>(bin) < _nbins)

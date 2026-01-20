@@ -58,7 +58,7 @@ TallyFoMAux::validParams()
 
 TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
   : AuxKernel(parameters),
-    _tally_val(isCoupled("tally_value") ? &coupledValue("tally_value") : nullptr),
+    _tally_val(coupledValue("tally_value")),
     _tally_std_dev(coupledValue("tally_std_dev")),
     _reference_val(isCoupled("ref_value") ? &coupledValue("ref_value") : nullptr),
     _sim_time(getPostprocessorValue("sim_time")),
@@ -70,11 +70,10 @@ TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
                "FDTallyGradAux only supports CONSTANT MONOMIAL shape functions. Please "
                "ensure that 'variable' is of type MONOMIAL and order CONSTANT.");
 
-  if (_tally_val)
-    if (getFieldVar("tally_value", 0)->feType() != FEType(libMesh::CONSTANT, libMesh::MONOMIAL))
-      paramError("tally_value",
-                 "TallyFoMAux only supports CONSTANT MONOMIAL shape functions. Please "
-                 "ensure that 'tally_value' is of type MONOMIAL and order CONSTANT.");
+  if (getFieldVar("tally_value", 0)->feType() != FEType(libMesh::CONSTANT, libMesh::MONOMIAL))
+    paramError("tally_value",
+               "TallyFoMAux only supports CONSTANT MONOMIAL shape functions. Please "
+               "ensure that 'tally_value' is of type MONOMIAL and order CONSTANT.");
 
   if (getFieldVar("tally_std_dev", 0)->feType() != FEType(libMesh::CONSTANT, libMesh::MONOMIAL))
     paramError("tally_std_dev",
@@ -95,12 +94,6 @@ TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
     case FoMType::RelDis:
     case FoMType::AbsDis:
     {
-      if (!_tally_val)
-        paramError("tally_value",
-                   "A tally variable must be provided when computing using the following figure of "
-                   "merit: ",
-                   getParam<MooseEnum>("fom_type"));
-
       if (!_reference_val)
         paramError("ref_value",
                    "A reference solution must be provided when computing using the following "
@@ -119,21 +112,26 @@ TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
 Real
 TallyFoMAux::computeValue()
 {
-  const auto rel_2 = std::pow(_tally_std_dev[0] / (*_tally_val)[0], 2.0);
+  const auto rel_2 = std::pow(_tally_std_dev[0] / _tally_val[0], 2.0);
 
-  // Every FoM uses the variance reduction FoM as a base.
-  auto fom = 1.0 / (_sim_time * rel_2);
+  // Every FoM starts with a divide by time.
+  auto fom = 1.0 / (_sim_time);
   switch (_fom_type)
   {
+    case FoMType::VarRed:
+    {
+      fom /= rel_2;
+      break;
+    }
     case FoMType::RelDis:
     {
-      fom /= (std::abs((*_tally_val)[0] - (*_reference_val)[0]) / (*_reference_val)[0]);
+      fom /= (std::abs(_tally_val[0] - (*_reference_val)[0]) / (*_reference_val)[0]);
       break;
     }
     case FoMType::AbsDis:
     {
       // Undo the divide-by-volume (since we're assuming the variables provided are volumetric).
-      fom /= (_current_elem->volume() * std::abs((*_tally_val)[0] - (*_reference_val)[0]));
+      fom /= (_current_elem->volume() * std::abs(_tally_val[0] - (*_reference_val)[0]));
       break;
     }
     default:

@@ -44,13 +44,13 @@ protected:
   const unsigned int _nbins;
 
   /// Minimum variable value.
-  const Real _min_value;
+  const Real & _min_value;
 
   /// Maximum variable value.
-  const Real _max_value;
+  const Real & _max_value;
 
   /// Bin width.
-  const Real _delta_var;
+  Real _delta_var;
 
   /// Coupled variable that is being binned.
   const VariableValue & _value;
