@@ -22,12 +22,12 @@
 
 #include "CardinalProblem.h"
 
-class SampleCDFProblem : public CardinalProblem
+class SamplePDFProblem : public CardinalProblem
 {
 public:
   static InputParameters validParams();
 
-  SampleCDFProblem(const InputParameters & parameters);
+  SamplePDFProblem(const InputParameters & parameters);
 
   /**
    * TODO

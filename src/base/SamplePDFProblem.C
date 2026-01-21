@@ -16,17 +16,17 @@
 /*                 See LICENSE for full restrictions                */
 /********************************************************************/
 
-#include "SampleCDFProblem.h"
+#include "SamplePDFProblem.h"
 
 #include "Function.h"
 
 #include <chrono>
 #include <omp.h>
 
-registerMooseObject("CardinalApp", SampleCDFProblem);
+registerMooseObject("CardinalApp", SamplePDFProblem);
 
 InputParameters
-SampleCDFProblem::validParams()
+SamplePDFProblem::validParams()
 {
   auto params = CardinalProblem::validParams();
   params.addClassDescription("A problem which samples a given cumulative density function with "
@@ -60,7 +60,7 @@ SampleCDFProblem::validParams()
   return params;
 }
 
-SampleCDFProblem::SampleCDFProblem(const InputParameters & parameters)
+SamplePDFProblem::SamplePDFProblem(const InputParameters & parameters)
   : CardinalProblem(parameters),
     _samples(getParam<unsigned int>("samples")),
     _max_num_attempts(getParam<unsigned int>("max_attempts")),
@@ -72,11 +72,11 @@ SampleCDFProblem::SampleCDFProblem(const InputParameters & parameters)
     _time(0.0)
 {
   if (n_processors() > 1)
-    mooseError("SampleCDFProblem cannot be executed with MPI!");
+    mooseError("SamplePDFProblem cannot be executed with MPI!");
 }
 
 void
-SampleCDFProblem::externalSolve()
+SamplePDFProblem::externalSolve()
 {
   auto t_start = std::chrono::high_resolution_clock::now();
 
@@ -144,7 +144,7 @@ SampleCDFProblem::externalSolve()
 }
 
 void
-SampleCDFProblem::syncSolutions(Direction direction)
+SamplePDFProblem::syncSolutions(Direction direction)
 {
   switch (direction)
   {
@@ -194,7 +194,7 @@ SampleCDFProblem::syncSolutions(Direction direction)
 }
 
 void
-SampleCDFProblem::addExternalVariables()
+SamplePDFProblem::addExternalVariables()
 {
   // Fetch the inverted CDFs to sample positions.
   _x_pdf = &getFunction(getParam<FunctionName>("x_coord_pdf"));
@@ -250,7 +250,7 @@ SampleCDFProblem::addExternalVariables()
 
 // TODO: allow users to improve the sampling efficiency by providing proposal distributions.
 Point
-SampleCDFProblem::rejectSampleCoordPDF(THREAD_ID tid)
+SamplePDFProblem::rejectSampleCoordPDF(THREAD_ID tid)
 {
   Point final_coord(0.0, 0.0, 0.0);
   // x-coord is always required.
@@ -312,14 +312,14 @@ SampleCDFProblem::rejectSampleCoordPDF(THREAD_ID tid)
 }
 
 Real
-SampleCDFProblem::sampleNumber(THREAD_ID tid)
+SamplePDFProblem::sampleNumber(THREAD_ID tid)
 {
   auto dis = std::uniform_real_distribution<Real>(0.0, 1.0);
   return dis(_rng[tid]);
 }
 
 bool
-SampleCDFProblem::solverSystemConverged(const unsigned int)
+SamplePDFProblem::solverSystemConverged(const unsigned int)
 {
   return true;
 }
