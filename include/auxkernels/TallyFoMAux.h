@@ -61,6 +61,11 @@ protected:
     AbsDis = 2
   } _fom_type;
 
-  /// Whether the FoM should be divided by volume or not.
-  const bool _divide_by_volume;
+  /// The type of optional scaling to apply to the FoM.
+  const enum class FoMScaling
+  {
+    None = 0,
+    InvHMax = 1,
+    NElem = 2
+  } _optional_scaling;
 };

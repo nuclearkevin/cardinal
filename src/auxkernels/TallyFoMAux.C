@@ -50,9 +50,12 @@ TallyFoMAux::validParams()
       "variance reduction FoM (var_red), the relative discrepancy FoM "
       "(rel_dis), or the absolute discrepancy FoM (abs_dis).");
 
-  params.addParam<bool>(
-      "divide_by_volume", false, "Whether the FoM should be divided by the element volume or not.");
-
+  params.addParam<MooseEnum>(
+      "optional_scaling",
+      MooseEnum("none, inv_h_max, n_elem", "none"),
+      "Whether the FoM should be scaled, and if so, what by. Options are no scaling "
+      "('none'), scaling by the inverse of he element vertex separation ('inv_h_max'), "
+      "and scaling by the number of elements (n_elem).");
   return params;
 }
 
@@ -63,7 +66,7 @@ TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
     _reference_val(isCoupled("ref_value") ? &coupledValue("ref_value") : nullptr),
     _sim_time(getPostprocessorValue("sim_time")),
     _fom_type(getParam<MooseEnum>("fom_type").getEnum<FoMType>()),
-    _divide_by_volume(getParam<bool>("divide_by_volume"))
+    _optional_scaling(getParam<MooseEnum>("optional_scaling").getEnum<FoMScaling>())
 {
   if (_var.feType() != FEType(libMesh::CONSTANT, libMesh::MONOMIAL))
     paramError("variable",
@@ -115,7 +118,7 @@ TallyFoMAux::computeValue()
   const auto rel_2 = std::pow(_tally_std_dev[0] / _tally_val[0], 2.0);
 
   // Every FoM starts with a divide by time.
-  auto fom = 1.0 / (_sim_time);
+  auto fom = static_cast<Real>(_t_step) / (_sim_time);
   switch (_fom_type)
   {
     case FoMType::VarRed:
@@ -138,7 +141,18 @@ TallyFoMAux::computeValue()
       break;
   }
 
-  return _divide_by_volume ? fom / _current_elem->volume() : fom;
+  switch (_optional_scaling)
+  {
+    case FoMScaling::None:
+      break;
+    case FoMScaling::InvHMax:
+      fom /= _current_elem->hmax(); break;
+    case FoMScaling::NElem:
+      fom *= _subproblem.mesh().nElem(); break;
+    default: break;
+  }
+
+  return fom;
 }
 
 #endif
