@@ -55,8 +55,14 @@ protected:
   /// Coupled variable that is being binned.
   const VariableValue & _value;
 
-  /// Current quadrature point.
-  unsigned int _qp;
+  /// Whether the bins should be log-spaced or not.
+  const bool _log;
+
+  /// The left value of the bins.
+  std::vector<Real> _left_edge;
+
+  /// The right value of the bins.
+  std::vector<Real> _right_edge;
 
   /// Value mid point of the bin.
   VectorPostprocessorValue & _bin_center;

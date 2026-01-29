@@ -52,10 +52,15 @@ TallyFoMAux::validParams()
 
   params.addParam<MooseEnum>(
       "optional_scaling",
-      MooseEnum("none, inv_h_max, n_elem", "none"),
+      MooseEnum("none inv_h_max n_elem", "none"),
       "Whether the FoM should be scaled, and if so, what by. Options are no scaling "
       "('none'), scaling by the inverse of he element vertex separation ('inv_h_max'), "
       "and scaling by the number of elements (n_elem).");
+  params.addParam<bool>(
+      "avg_time",
+      false,
+      "Whether the average time per timestep should be used, or the total time.");
+
   return params;
 }
 
@@ -66,7 +71,8 @@ TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
     _reference_val(isCoupled("ref_value") ? &coupledValue("ref_value") : nullptr),
     _sim_time(getPostprocessorValue("sim_time")),
     _fom_type(getParam<MooseEnum>("fom_type").getEnum<FoMType>()),
-    _optional_scaling(getParam<MooseEnum>("optional_scaling").getEnum<FoMScaling>())
+    _optional_scaling(getParam<MooseEnum>("optional_scaling").getEnum<FoMScaling>()),
+    _average_time(getParam<bool>("avg_time"))
 {
   if (_var.feType() != FEType(libMesh::CONSTANT, libMesh::MONOMIAL))
     paramError("variable",
@@ -118,7 +124,10 @@ TallyFoMAux::computeValue()
   const auto rel_2 = std::pow(_tally_std_dev[0] / _tally_val[0], 2.0);
 
   // Every FoM starts with a divide by time.
-  auto fom = static_cast<Real>(_t_step) / (_sim_time);
+  auto fom = 1.0 / (_sim_time);
+  if (_average_time)
+    fom *= static_cast<Real>(_t_step);
+
   switch (_fom_type)
   {
     case FoMType::VarRed:

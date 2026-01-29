@@ -68,4 +68,7 @@ protected:
     InvHMax = 1,
     NElem = 2
   } _optional_scaling;
+
+  /// Whether the average time should be used or not.
+  const bool _average_time;
 };
