@@ -53,6 +53,9 @@ protected:
   /// The simulation time.
   const Real & _sim_time;
 
+  /// The exponent for \sigma
+  const Real & _tally_sigma_exp;
+
   /// The type of FoM to compute.
   const enum class FoMType
   {

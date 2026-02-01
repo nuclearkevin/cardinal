@@ -43,6 +43,8 @@ TallyFoMAux::validParams()
 
   params.addRequiredParam<PostprocessorName>("sim_time", "The OpenMC simulation time.");
 
+  params.addParam<Real>("tally_sigma_exponent", 2.0, "The power to take the tally statistical error to.");
+
   params.addRequiredParam<MooseEnum>(
       "fom_type",
       MooseEnum("var_red rel_dis abs_dis"),
@@ -70,6 +72,7 @@ TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
     _tally_std_dev(coupledValue("tally_std_dev")),
     _reference_val(isCoupled("ref_value") ? &coupledValue("ref_value") : nullptr),
     _sim_time(getPostprocessorValue("sim_time")),
+    _tally_sigma_exp(getParam<Real>("tally_sigma_exponent")),
     _fom_type(getParam<MooseEnum>("fom_type").getEnum<FoMType>()),
     _optional_scaling(getParam<MooseEnum>("optional_scaling").getEnum<FoMScaling>()),
     _average_time(getParam<bool>("avg_time"))
@@ -121,7 +124,7 @@ TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
 Real
 TallyFoMAux::computeValue()
 {
-  const auto rel_2 = std::pow(_tally_std_dev[0] / _tally_val[0], 2.0);
+  const auto rel = std::pow(_tally_std_dev[0] / _tally_val[0], _tally_sigma_exp);
 
   // Every FoM starts with a divide by time.
   auto fom = 1.0 / (_sim_time);
@@ -132,7 +135,7 @@ TallyFoMAux::computeValue()
   {
     case FoMType::VarRed:
     {
-      fom /= rel_2;
+      fom /= rel;
       break;
     }
     case FoMType::RelDis:
