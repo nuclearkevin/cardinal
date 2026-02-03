@@ -198,7 +198,7 @@ SamplePDFProblem::addExternalVariables()
 {
   // Fetch the inverted CDFs to sample positions.
   _x_pdf = &getFunction(getParam<FunctionName>("x_coord_pdf"));
-  if (mesh().spatialDimension() > 2)
+  if (mesh().spatialDimension() > 1)
   {
     if (!isParamValid("y_coord_pdf"))
       paramError("y_coord_pdf", "In 2D or 3D, y_coord_pdf is required!");
@@ -210,7 +210,7 @@ SamplePDFProblem::addExternalVariables()
     else
       _y_blanket = getParam<Real>("y_blanket");
 
-    if (mesh().spatialDimension() > 3)
+    if (mesh().spatialDimension() > 2)
     {
       if (!isParamValid("z_coord_pdf"))
         paramError("z_coord_pdf", "In 3D, z_coord_pdf is required!");
