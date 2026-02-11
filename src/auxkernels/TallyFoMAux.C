@@ -40,17 +40,26 @@ TallyFoMAux::validParams()
       "The variable containing the reference solution. TallyFoMAux "
       "assumes this is a volumetric quantity. This is required for the discrepancy "
       "figures of merit.");
+  params.addCoupledVar(
+      "tally_val_old",
+      "The variable containing the reference solution from a previous adaptivity step. TallyFoMAux "
+      "assumes this is a volumetric quantity. This is required for the stationarity "
+      "figure of merit.");
+  params.addCoupledVar(
+      "tally_std_dev_old",
+      "The variable containing the standard deviation of the reference solution from a previous "
+      "adaptivity step. TallyFoMAux assumes this is a volumetric quantity. This is required for "
+      "the stationarity figure of merit.");
 
   params.addRequiredParam<PostprocessorName>("sim_time", "The OpenMC simulation time.");
 
-  params.addParam<Real>("tally_sigma_exponent", 2.0, "The power to take the tally statistical error to.");
-
   params.addRequiredParam<MooseEnum>(
       "fom_type",
-      MooseEnum("var_red rel_dis abs_dis"),
+      MooseEnum("var_red rel_dis abs_dis cycle_diff cycle_diff_std_dev"),
       "The type of Figure of Merit (FoM) to compute. Options are the standard "
       "variance reduction FoM (var_red), the relative discrepancy FoM "
-      "(rel_dis), or the absolute discrepancy FoM (abs_dis).");
+      "(rel_dis), the absolute discrepancy FoM (abs_dis), or the stationarity "
+      "FoM (stationarity).");
 
   params.addParam<MooseEnum>(
       "optional_scaling",
@@ -69,10 +78,11 @@ TallyFoMAux::validParams()
 TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
   : AuxKernel(parameters),
     _tally_val(coupledValue("tally_value")),
+    _tally_val_old(isCoupled("tally_val_old") ? &coupledValue("tally_val_old") : nullptr),
+    _tally_std_dev_old(isCoupled("tally_std_dev_old") ? &coupledValue("tally_std_dev_old") : nullptr),
     _tally_std_dev(coupledValue("tally_std_dev")),
     _reference_val(isCoupled("ref_value") ? &coupledValue("ref_value") : nullptr),
     _sim_time(getPostprocessorValue("sim_time")),
-    _tally_sigma_exp(getParam<Real>("tally_sigma_exponent")),
     _fom_type(getParam<MooseEnum>("fom_type").getEnum<FoMType>()),
     _optional_scaling(getParam<MooseEnum>("optional_scaling").getEnum<FoMScaling>()),
     _average_time(getParam<bool>("avg_time"))
@@ -91,6 +101,18 @@ TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
     paramError("tally_std_dev",
                "TallyFoMAux only supports CONSTANT MONOMIAL shape functions. Please "
                "ensure that 'tally_std_dev' is of type MONOMIAL and order CONSTANT.");
+
+  if (_tally_std_dev_old)
+    if (getFieldVar("tally_std_dev_old", 0)->feType() != FEType(libMesh::CONSTANT, libMesh::MONOMIAL))
+      paramError("tally_std_dev_old",
+                 "TallyFoMAux only supports CONSTANT MONOMIAL shape functions. Please "
+                 "ensure that 'tally_std_dev_old' is of type MONOMIAL and order CONSTANT.");
+
+  if (_tally_val_old)
+    if (getFieldVar("tally_val_old", 0)->feType() != FEType(libMesh::CONSTANT, libMesh::MONOMIAL))
+      paramError("tally_val_old",
+                 "TallyFoMAux only supports CONSTANT MONOMIAL shape functions. Please "
+                 "ensure that 'tally_val_old' is of type MONOMIAL and order CONSTANT.");
 
   if (_reference_val)
     if (getFieldVar("ref_value", 0)->feType() != FEType(libMesh::CONSTANT, libMesh::MONOMIAL))
@@ -113,6 +135,23 @@ TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
                    getParam<MooseEnum>("fom_type"));
       break;
     }
+    case FoMType::CycleDiff:
+    {
+      if (!_tally_val_old)
+        paramError("tally_val_old",
+                   "An old tally value must be provided "
+                   "when computing using the following  figure of merit: ",
+                   getParam<MooseEnum>("fom_type"));
+    }
+    case FoMType::CycleDiffStdDev:
+    {
+      if (!_tally_std_dev_old)
+        paramError("tally_std_dev_old",
+                   "An old tally standard deviation must be provided "
+                   "when computing using the following  figure of merit: ",
+                   getParam<MooseEnum>("fom_type"));
+      break;
+    }
     default:
     {
       mooseError("Unhandled FoMType enum in TallyFoMAux!");
@@ -124,18 +163,19 @@ TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
 Real
 TallyFoMAux::computeValue()
 {
-  const auto rel = std::pow(_tally_std_dev[0] / _tally_val[0], _tally_sigma_exp);
+  constexpr Real N_SIGMA = 1.0;
+  const auto rel = _tally_std_dev[0] / _tally_val[0];
+  const auto rel2 = std::pow(rel, 2.0);
+
+  const auto time = _average_time ? _sim_time / static_cast<Real>(_t_step) : _sim_time;
 
   // Every FoM starts with a divide by time.
-  auto fom = 1.0 / (_sim_time);
-  if (_average_time)
-    fom *= static_cast<Real>(_t_step);
-
+  auto fom = 1.0 / time;
   switch (_fom_type)
   {
     case FoMType::VarRed:
     {
-      fom /= rel;
+      fom /= rel2;
       break;
     }
     case FoMType::RelDis:
@@ -149,19 +189,32 @@ TallyFoMAux::computeValue()
       fom /= (_current_elem->volume() * std::abs(_tally_val[0] - (*_reference_val)[0]));
       break;
     }
+    case FoMType::CycleDiff:
+    {
+      fom *= std::abs(_tally_val[0] - (*_tally_val_old)[0]) / (*_tally_val_old)[0];
+      break;
+    }
+    case FoMType::CycleDiffStdDev:
+    {
+      {
+        const auto tally_upper = _tally_val[0] + N_SIGMA * _tally_std_dev[0];
+        const auto tally_lower = _tally_val[0] - N_SIGMA * _tally_std_dev[0];
+
+        const auto min_num = std::min(std::abs(tally_upper - (*_tally_val_old)[0]), std::abs(tally_lower - (*_tally_val_old)[0]));
+        fom *= std::abs(_tally_val[0] - (*_tally_val_old)[0]) / (*_tally_val_old)[0] / rel;
+      }
+      break;
+    }
     default:
       break;
   }
 
   switch (_optional_scaling)
   {
-    case FoMScaling::None:
-      break;
-    case FoMScaling::InvHMax:
-      fom /= _current_elem->hmax(); break;
-    case FoMScaling::NElem:
-      fom *= _subproblem.mesh().nElem(); break;
-    default: break;
+    case FoMScaling::None:                                       break;
+    case FoMScaling::InvHMax: fom /= _current_elem->hmax();      break;
+    case FoMScaling::NElem:   fom *= _subproblem.mesh().nElem(); break;
+    default:                                                     break;
   }
 
   return fom;

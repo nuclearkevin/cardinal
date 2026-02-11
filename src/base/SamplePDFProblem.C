@@ -73,6 +73,9 @@ SamplePDFProblem::SamplePDFProblem(const InputParameters & parameters)
 {
   if (n_processors() > 1)
     mooseError("SamplePDFProblem cannot be executed with MPI!");
+
+  for (THREAD_ID tid = 0; tid < libMesh::n_threads(); ++tid)
+    _rng.emplace_back(tid);
 }
 
 void
@@ -83,13 +86,11 @@ SamplePDFProblem::externalSolve()
   auto msh = mesh().getMeshPtr();
   const auto num_active_elem = mesh().nActiveElem();
 
-  // Reset RNG and point locators. Needed to ensure the mesh changes are taken into
-  // account when "tallying", and that each adaptivity step sees the same RNG stream.
-  _rng.clear();
+  // Reset point locators. Needed to ensure the mesh changes are taken into
+  // account when "tallying".
   _pl.clear();
   for (THREAD_ID tid = 0; tid < libMesh::n_threads(); ++tid)
   {
-    _rng.emplace_back(tid);
     _pl.emplace_back(mesh().getMeshPtr()->sub_point_locator());
     _pl.back()->set_contains_point_tol(1e-8);
     _pl.back()->enable_out_of_mesh_mode();

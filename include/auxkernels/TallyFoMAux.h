@@ -44,6 +44,12 @@ protected:
   /// The variable containing the tally score.
   const VariableValue & _tally_val;
 
+  /// The previous value of the tally variable. Used for the stationarity FoM.
+  const VariableValue * _tally_val_old;
+
+  /// The previous value of the tally standard deviation variable. Used for the stationarity FoM.
+  const VariableValue * _tally_std_dev_old;
+
   /// The variables containing the tally score standard deviation.
   const VariableValue & _tally_std_dev;
 
@@ -53,15 +59,14 @@ protected:
   /// The simulation time.
   const Real & _sim_time;
 
-  /// The exponent for \sigma
-  const Real & _tally_sigma_exp;
-
   /// The type of FoM to compute.
   const enum class FoMType
   {
-    VarRed = 0,
-    RelDis = 1,
-    AbsDis = 2
+    VarRed  = 0,
+    RelDis  = 1,
+    AbsDis  = 2,
+    CycleDiff = 3,
+    CycleDiffStdDev = 4
   } _fom_type;
 
   /// The type of optional scaling to apply to the FoM.
