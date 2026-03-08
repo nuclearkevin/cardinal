@@ -140,7 +140,7 @@ TallyFoMAux::TallyFoMAux(const InputParameters & parameters)
       if (!_tally_val_old)
         paramError("tally_val_old",
                    "An old tally value must be provided "
-                   "when computing using the following  figure of merit: ",
+                   "when computing using the following figure of merit: ",
                    getParam<MooseEnum>("fom_type"));
     }
     case FoMType::CycleDiffStdDev:
@@ -196,13 +196,7 @@ TallyFoMAux::computeValue()
     }
     case FoMType::CycleDiffStdDev:
     {
-      {
-        const auto tally_upper = _tally_val[0] + N_SIGMA * _tally_std_dev[0];
-        const auto tally_lower = _tally_val[0] - N_SIGMA * _tally_std_dev[0];
-
-        const auto min_num = std::min(std::abs(tally_upper - (*_tally_val_old)[0]), std::abs(tally_lower - (*_tally_val_old)[0]));
-        fom *= std::abs(_tally_val[0] - (*_tally_val_old)[0]) / (*_tally_val_old)[0] / rel;
-      }
+      fom *= std::abs(_tally_val[0] - (*_tally_val_old)[0]) / (*_tally_val_old)[0] / rel;
       break;
     }
     default:
