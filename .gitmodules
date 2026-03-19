@@ -43,3 +43,6 @@
 [submodule "contrib/nuclear_data"]
 	path = contrib/nuclear_data
 	url = https://github.com/OTU-Centre-for-SMRs/nuclear_data.git
+[submodule "contrib/xdg"]
+	path = contrib/xdg
+	url = https://github.com/xdg-org/xdg.git
