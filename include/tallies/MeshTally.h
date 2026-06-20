@@ -23,6 +23,11 @@
 
 #include "openmc/tallies/filter_mesh.h"
 
+#ifdef ENABLE_XDG
+#include "xdg/xdg.h"
+#include "xdg/mesh_managers.h"
+#endif
+
 namespace libMesh
 {
 class ReplicatedMesh;
@@ -111,13 +116,16 @@ protected:
   /// Whether we're using an indirection layer to map between the OpenMC mesh tally and the MOOSE mesh.
   const bool _use_dof_map;
 
-  /**
-   * For use with block restriction only. A copy of the mesh is made which only contains elements in
-   * the blocks the user wishes to tally on. This is necessary at the moment as the point locators
-   * used in OpenMC to find collision sites are not passed a set of block IDs to filter elements.
-   * TODO: Fix this in OpenMC
-   */
-  std::unique_ptr<libMesh::ReplicatedMesh> _libmesh_mesh_copy;
   /// A mapping between the OpenMC bins (active block restricted elements) and all elements.
   std::vector<unsigned int> _bin_to_element_mapping;
+
+#ifdef ENABLE_XDG
+  /// Whether this mesh tally should use XDG or not.
+  const bool _use_xdg;
+
+  /// The XDG mesh manager representing this mesh.
+  std::shared_ptr<xdg::LibMeshManager> _xdg_mesh_manager;
+  /// The XDG instance used for this mesh tally.
+  std::shared_ptr<xdg::XDG> _xdg_instance;
+#endif
 };

@@ -122,6 +122,10 @@ OpenMCProblemBase::OpenMCProblemBase(const InputParameters & params)
     mooseError("The tally system used by OpenMCProblemBase derived classes has been deprecated. "
                "Please add tallies with the [Tallies] block instead.");
 
+  // We need to set the libMesh comm in OpenMC prior to initialization to ensure
+  // unstructured mesh tallies loaded from files use the right libMesh state.
+  openmc::settings::libmesh_comm = &_mesh.comm();
+
   // Suppress OpenMC output when the language server is active by
   // decreasing the verbosity to level 1 (the lowest).
   std::vector<std::string> argv_vec = {"openmc"};
@@ -143,6 +147,9 @@ OpenMCProblemBase::OpenMCProblemBase(const InputParameters & params)
   argv.push_back(nullptr);
 
   openmc_init(argv.size() - 1, argv.data(), &_communicator.get());
+
+  if (openmc::settings::libmesh_comm != &_mesh.comm())
+    mooseError("Internal error: OpenMC overrode global libMesh parameters");
 
   // ensure that any mapped cells have their distribcell indices generated in OpenMC
   if (!openmc::settings::material_cell_offsets)
@@ -201,11 +208,6 @@ OpenMCProblemBase::OpenMCProblemBase(const InputParameters & params)
   }
 
   _n_cell_digits = std::to_string(openmc::model::cells.size()).length();
-
-  if (openmc::settings::libmesh_comm)
-    mooseWarning("libMesh communicator already set in OpenMC.");
-
-  openmc::settings::libmesh_comm = &_mesh.comm();
 
   if (isParamValid("openmc_verbosity"))
     openmc::settings::verbosity = getParam<unsigned int>("openmc_verbosity");
