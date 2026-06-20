@@ -139,24 +139,24 @@ MeshTally::MeshTally(const InputParameters & parameters)
     if (_openmc_problem.scaling() != 1.0)
       mooseError("XDG mesh tallies cannot be scaled!");
 
-    // Check to make sure there are no sidesets.
-    if (_openmc_problem.getMooseMesh().getBoundaryIDs().size() > 0)
-      paramError("use_xdg",
-                 "Presently, XDG mesh tallies will fail catastrophically if "
-                 "elements in different blocks reference the same sideset "
-                 "(https://github.com/xdg-org/xdg/issues/212). To prevent "
-                 "this, sidesets are not allowed on the mesh when XDG mesh "
-                 "tallies are enabled. Either ensure your mesh has no sidesets, "
-                 "or set 'use_xdg = false'.");
-
-    // Check to make sure all elements are TET4s.
+    // Check to make sure all elements are TET4s or HEX8s and the mesh only has one element type.
+    std::set<ElemType> contained_elem;
     auto begin = _openmc_problem.getMooseMesh().activeLocalElementsBegin();
     auto end = _openmc_problem.getMooseMesh().activeLocalElementsEnd();
     for (const auto & elem : libMesh::as_range(begin, end))
-      if (elem->type() != ElemType::TET4)
+      contained_elem.insert(elem->type());
+
+    if (contained_elem.size() > 1)
+      paramError("use_xdg",
+                 "XDG mesh tallies only support single-element meshess! Either "
+                 "ensure your mesh uses a single element type, or set "
+                 "'use_xdg = false'.");
+
+    for (auto elem_type : contained_elem)
+      if (elem_type != ElemType::TET4 && elem_type != ElemType::HEX8)
         paramError("use_xdg",
-                   "XDG mesh tallies only support TET4 elements! Either "
-                   "ensure your mesh only uses TET4 elements, or set "
+                   "XDG mesh tallies only support TET4 and HEX8 elements! Either "
+                   "ensure your mesh only uses either TET4 or HEX8 elements, or set "
                    "'use_xdg = false'.");
   }
 #endif
