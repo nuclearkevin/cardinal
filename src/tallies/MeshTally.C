@@ -139,19 +139,21 @@ MeshTally::MeshTally(const InputParameters & parameters)
     if (_openmc_problem.scaling() != 1.0)
       mooseError("XDG mesh tallies cannot be scaled!");
 
-    // Check to make sure all elements are TET4s or HEX8s and the mesh only has one element type.
+    // Gather all element types in the mesh.
     std::set<ElemType> contained_elem;
     auto begin = _openmc_problem.getMooseMesh().activeLocalElementsBegin();
     auto end = _openmc_problem.getMooseMesh().activeLocalElementsEnd();
     for (const auto & elem : libMesh::as_range(begin, end))
       contained_elem.insert(elem->type());
 
+    // Check to make sure the mesh only contains a single element type.
     if (contained_elem.size() > 1)
       paramError("use_xdg",
                  "XDG mesh tallies only support single-element meshess! Either "
                  "ensure your mesh uses a single element type, or set "
                  "'use_xdg = false'.");
 
+    // Check to make sure all elements are TET4s or HEX8s.
     for (auto elem_type : contained_elem)
       if (elem_type != ElemType::TET4 && elem_type != ElemType::HEX8)
         paramError("use_xdg",
