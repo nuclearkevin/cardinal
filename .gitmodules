@@ -1,7 +1,3 @@
-[submodule "contrib/openmc"]
-	path = contrib/openmc
-	url = https://github.com/pshriwise/openmc.git
-  branch = xdg-mesh
 [submodule "contrib/nekRS"]
 	path = contrib/nekRS
 	url = https://github.com/neams-th-coe/nekRS.git
@@ -44,7 +40,3 @@
 [submodule "contrib/nuclear_data"]
 	path = contrib/nuclear_data
 	url = https://github.com/OTU-Centre-for-SMRs/nuclear_data.git
-[submodule "contrib/xdg"]
-	path = contrib/xdg
-	url = https://github.com/pshriwise/xdg.git
-  branch = quad-hex-support
