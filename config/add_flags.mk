@@ -9,7 +9,10 @@ ifeq ($(ENABLE_OPENMC), yes)
 endif
 
 ifeq ($(ENABLE_XDG), yes)
-  libmesh_CXXFLAGS    += -DENABLE_XDG -DXDG_EMBREE4 -DXDG_ENABLE_LIBMESH -DXDG_ENABLE_MOAB
+	libmesh_CXXFLAGS    += -DENABLE_XDG -DXDG_EMBREE4 -DXDG_ENABLE_LIBMESH
+	ifeq ($(ENABLE_DAGMC), yes)
+	  libmesh_CXXFLAGS  += -DXDG_ENABLE_MOAB
+	endif
 
 	# this flag is used in OpenMC
 	libmesh_CXXFLAGS    += -DOPENMC_XDG_ENABLED
