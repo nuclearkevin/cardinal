@@ -16,8 +16,8 @@ $(XDG_BUILDDIR)/Makefile: build_moab build_embree | $(XDG_DIR)/CMakeLists.txt
 	-DXDG_ENABLE_LIBMESH=ON \
 	-DXDG_LINK_MPI=ON \
 	-DXDG_ENABLE_EMBREE=ON \
-	-DXDG_BUILD_TESTS=ON \
-	-DXDG_BUILD_TOOLS=ON \
+	-DXDG_BUILD_TESTS=OFF \
+	-DXDG_BUILD_TOOLS=OFF \
 	$(XDG_DIR)
 
 build_xdg: | $(XDG_BUILDDIR)/Makefile
