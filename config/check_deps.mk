@@ -7,6 +7,7 @@ endef
 NEKRS_DIR           ?= $(CONTRIB_DIR)/nekRS
 OPENMC_DIR          ?= $(CONTRIB_DIR)/openmc
 NUCLEARDATA_DIR     ?= $(CONTRIB_DIR)/nuclear_data
+XDG_DIR             ?= $(CONTRIB_DIR)/xdg
 DAGMC_DIR           ?= $(CONTRIB_DIR)/DAGMC
 DOUBLEDOWN_DIR      ?= $(CONTRIB_DIR)/double-down
 EMBREE_DIR          ?= $(CONTRIB_DIR)/embree
@@ -25,6 +26,7 @@ MOOSE_CONTENT      := $(shell ls $(MOOSE_DIR) 2> /dev/null)
 NEKRS_CONTENT      := $(shell ls $(NEKRS_DIR) 2> /dev/null)
 OPENMC_CONTENT     := $(shell ls $(OPENMC_DIR) 2> /dev/null)
 NUCLEARDATA_CONTENT:= $(shell ls $(NUCLEARDATA_DIR) 2> /dev/null)
+XDG_CONTENT        := $(shell ls $(XDG_DIR) 2> /dev/null)
 DAGMC_CONTENT      := $(shell ls $(DAGMC_DIR) 2> /dev/null)
 DOUBLEDOWN_CONTENT := $(shell ls $(DOUBLEDOWN_DIR) 2> /dev/null)
 EMBREE_CONTENT     := $(shell ls $(EMBREE_DIR) 2> /dev/null)
@@ -37,7 +39,8 @@ SODIUM_CONTENT     := $(shell ls $(SODIUM_DIR) 2> /dev/null)
 POTASSIUM_CONTENT  := $(shell ls $(POTASSIUM_DIR) 2> /dev/null)
 IAPWS95_CONTENT    := $(shell ls $(IAPWS95_DIR) 2> /dev/null)
 
-# convert ENABLE_NEK, ENABLE_OPENMC, ENABLE_DOUBLE_DOWN, and ENABLE_DAGMC to consistent truthy value
+# convert ENABLE_NEK, ENABLE_OPENMC, ENABLE_DOUBLE_DOWN, ENABLE_XDG, and ENABLE_DAGMC to
+# consistent truthy value
 ifeq ($(ENABLE_OPENMC),$(filter $(ENABLE_OPENMC), true yes on 1 TRUE YES ON))
   ENABLE_OPENMC := yes
 endif
@@ -53,6 +56,9 @@ ifeq ($(ENABLE_DAGMC),$(filter $(ENABLE_DAGMC), true yes on 1 TRUE YES ON))
     $(warning $n"***WARNING***: You are compiling Cardinal with DAGMC but without Double-Down. For mesh-based geometries, Double-Down can yield speedups of ~100x and is highly recommended."$n)
   endif
 endif
+ifeq ($(ENABLE_XDG),$(filter $(ENABLE_XDG), true yes on 1 TRUE YES ON))
+  ENABLE_XDG := yes
+endif
 
 ifeq ($(ENABLE_OPENMC), yes)
   # HDF5 is only needed to be linked if using OpenMC
@@ -61,6 +67,14 @@ else
   ifeq ($(ENABLE_DAGMC), yes)
     $(info Ignoring ENABLE_DAGMC because OpenMC is not enabled.)
     ENABLE_DAGMC := no
+  endif
+	ifeq ($(ENABLE_XDG), yes)
+    $(info Ignoring ENABLE_XDG because OpenMC is not enabled.)
+    ENABLE_XDG := no
+  endif
+	ifeq ($(ENABLE_DOUBLE_DOWN), yes)
+    $(info Ignoring ENABLE_DOUBLE_DOWN because OpenMC is not enabled.)
+    ENABLE_DOUBLE_DOWN := no
   endif
 endif
 
@@ -107,6 +121,16 @@ ifeq ($(ENABLE_OPENMC), yes)
   endif
 endif
 
+ifeq ($(ENABLE_XDG), yes)
+	ifeq ($(XDG_CONTENT),)
+    $(error $n"XDG does not seem to be available, but ENABLE_XDG is enabled. Make sure that the submodule is checked out.$n$nTo fetch the XDG submodule, use ./scripts/get-dependencies.sh")
+  else
+    $(info Cardinal is using XDG from             $(XDG_DIR))
+  endif
+
+	NEED_EMBREE := yes
+endif
+
 ifeq ($(ENABLE_DAGMC), yes)
   ifeq ($(DAGMC_CONTENT),)
     $(error $n"DagMC does not seem to be available, but ENABLE_DAGMC is enabled. Make sure that the submodule is checked out.$n$nTo fetch the DagMC submodule, use ./scripts/get-dependencies.sh")
@@ -118,12 +142,8 @@ ifeq ($(ENABLE_DAGMC), yes)
   	  $(error $n"Double-Down does not seem to be available, but ENABLE_DAGMC and ENABLE_DOUBLE_DOWN are enabled. Make sure that the submodule is checked out.$n$nTo fetch the Double-Down submodule, use ./scripts/get-dependencies.sh")
   	else
   	  $(info Cardinal is using Double-Down from     $(DOUBLEDOWN_DIR))
+			NEED_EMBREE := yes
   	endif
-		ifeq ($(EMBREE_CONTENT),)
-  	  $(error $n"Embree does not seem to be available, but ENABLE_DAGMC and ENABLE_DOUBLE_DOWN are enabled. Make sure that the submodule is checked out.$n$nTo fetch the Embree submodule, use ./scripts/get-dependencies.sh")
-  	else
-  	  $(info Cardinal is using Embree from          $(EMBREE_DIR))
-		endif
   endif
   ifeq ($(MOAB_CONTENT),)
     $(error $n"Moab does not seem to be available, but ENABLE_DAGMC is enabled. Make sure that the submodule is checked out.$n$nTo fetch the Moab submodule, use ./scripts/get-dependencies.sh")
@@ -136,11 +156,6 @@ ifeq ($(ENABLE_DAGMC), yes)
     $(warning $n"***WARNING***: Your DagMC submodule is not pointing to the commit tied to Cardinal.$n                To fetch the paired commit, use ./scripts/get-dependencies.sh"$n)
   endif
 
-	EMBREE_status := $(shell git -C $(CONTRIB_DIR) submodule status 2>/dev/null | grep embree | cut -c1)
-  ifneq (,$(findstring +,$(EMBREE_status)))
-    $(warning $n"***WARNING***: Your Embree submodule is not pointing to the commit tied to Cardinal.$n                To fetch the paired commit, use ./scripts/get-dependencies.sh"$n)
-  endif
-
 	DOUBLEDOWN_status := $(shell git -C $(CONTRIB_DIR) submodule status 2>/dev/null | grep double-down | cut -c1)
   ifneq (,$(findstring +,$(DOUBLEDOWN_status)))
     $(warning $n"***WARNING***: Your Double-Down submodule is not pointing to the commit tied to Cardinal.$n                To fetch the paired commit, use ./scripts/get-dependencies.sh"$n)
@@ -150,6 +165,19 @@ ifeq ($(ENABLE_DAGMC), yes)
   ifneq (,$(findstring +,$(moab_status)))
     $(warning $n"***WARNING***: Your Moab submodule is not pointing to the commit tied to Cardinal.$n                To fetch the paired commit, use ./scripts/get-dependencies.sh"$n)
   endif
+endif
+
+ifeq ($(NEED_EMBREE), yes)
+	ifeq ($(EMBREE_CONTENT),)
+		$(error $n"Embree does not seem to be available, but either ENABLE_XDG or ENABLE_DOUBLE_DOWN are enabled. Make sure that the submodule is checked out.$n$nTo fetch the Embree submodule, use ./scripts/get-dependencies.sh")
+	else
+    $(info Cardinal is using Embree from          $(EMBREE_DIR))
+	endif
+
+	EMBREE_status := $(shell git -C $(CONTRIB_DIR) submodule status 2>/dev/null | grep embree | cut -c1)
+	ifneq (,$(findstring +,$(EMBREE_status)))
+		$(warning $n"***WARNING***: Your Embree submodule is not pointing to the commit tied to Cardinal.$n                To fetch the paired commit, use ./scripts/get-dependencies.sh"$n)
+	endif
 endif
 
 ifneq ($(SAM_CONTENT),)
