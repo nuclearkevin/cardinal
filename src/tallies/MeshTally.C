@@ -24,6 +24,11 @@
 
 #ifdef ENABLE_XDG
 #include "openmc/xdg.h"
+
+// For cell-under-voxel subdivision.
+#include "openmc/random_ray/flat_source_domain.h"
+#include "openmc/geometry.h"
+#include "openmc/universe.h"
 #endif
 
 registerMooseObject("CardinalApp", MeshTally);
@@ -171,9 +176,15 @@ MeshTally::MeshTally(const InputParameters & parameters)
   if (_instance != 0)
     _tally_name = std::vector<std::string>();
 
-  // The random ray solver requires tracklength estimators, which unstructured meshes don't support.
+  // The random ray solver requires tracklength estimators, which non-XDG unstructured meshes
+  // don't support.
+#ifdef ENABLE_XDG
+  if (_openmc_problem.runRandomRay() && !_use_xdg)
+    mooseError("Non-XDG unstructured mesh tallies are not supported when using the random ray solver!");
+#else
   if (_openmc_problem.runRandomRay())
     mooseError("Unstructured mesh tallies are not supported when using the random ray solver!");
+#endif
 }
 
 std::pair<unsigned int, openmc::Filter *>
@@ -251,6 +262,16 @@ MeshTally::spatialFilter()
   _mesh_template->set_id(-1);
   _mesh_template->output_ = false;
 
+#ifdef ENABLE_XDG
+  // Use the mesh for cell-under-voxel subdivision if running the random ray solver
+  if (_openmc_problem.runRandomRay() && _use_xdg)
+  {
+    auto root_uni_id = openmc::model::universes[openmc::model::root_universe]->id_;
+    openmc::FlatSourceDomain::mesh_domain_map_[_mesh_template->id()].emplace_back(
+      openmc::Source::DomainType::UNIVERSE, root_uni_id);
+  }
+#endif
+
   _mesh_filter = dynamic_cast<openmc::MeshFilter *>(openmc::Filter::create("mesh"));
   _mesh_filter->set_mesh(_mesh_index);
   _mesh_filter->set_translation({_mesh_translation(0), _mesh_translation(1), _mesh_translation(2)});
@@ -267,6 +288,10 @@ MeshTally::resetTally()
   TallyBase::resetTally();
 
   // Erase the OpenMC mesh.
+#ifdef ENABLE_XDG
+  if (_openmc_problem.runRandomRay() && _use_xdg)
+    openmc::FlatSourceDomain::mesh_domain_map_.erase(_mesh_template->id());
+#endif
   openmc::model::meshes.erase(openmc::model::meshes.begin() + _mesh_index);
 }
 
