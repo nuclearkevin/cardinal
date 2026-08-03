@@ -154,7 +154,7 @@ MeshTally::MeshTally(const InputParameters & parameters)
     // Check to make sure the mesh only contains a single element type.
     if (contained_elem.size() > 1)
       paramError("use_xdg",
-                 "XDG mesh tallies only support single-element meshess! Either "
+                 "XDG mesh tallies only support single-element meshes! Either "
                  "ensure your mesh uses a single element type, or set "
                  "'use_xdg = false'.");
 
@@ -179,8 +179,17 @@ MeshTally::MeshTally(const InputParameters & parameters)
   // The random ray solver requires tracklength estimators, which non-XDG unstructured meshes
   // don't support.
 #ifdef ENABLE_XDG
-  if (_openmc_problem.runRandomRay() && !_use_xdg)
-    mooseError("Non-XDG unstructured mesh tallies are not supported when using the random ray solver!");
+  if (_openmc_problem.runRandomRay())
+  {
+    if (!_use_xdg)
+      mooseError("Non-XDG unstructured mesh tallies are not supported when using the random ray solver!");
+
+    // We need to silently override the tally estimator to collision due to a bug
+    // in OpenMC's random ray solver. This only changes how tallies are mapped to
+    // source regions (which uses the Monte Carlo tallying infrastructure).
+    // Tallied quantities still use tracklengths as TRRM is based on MOC.
+    _estimator = openmc::TallyEstimator::COLLISION;
+  }
 #else
   if (_openmc_problem.runRandomRay())
     mooseError("Unstructured mesh tallies are not supported when using the random ray solver!");
