@@ -21,6 +21,11 @@ $(XDG_BUILDDIR)/Makefile: build_moab build_embree | $(XDG_DIR)/CMakeLists.txt
 	$(XDG_DIR)
 
 build_xdg: | $(XDG_BUILDDIR)/Makefile
+	# Fix an issue where different version FMT libraries collide.
+	# This is very crude and should be fixed in OpenMC at some point.
+	rm -rf $(CONTRIB_INSTALL_DIR)/lib/cmake/fmt \
+				 $(CONTRIB_INSTALL_DIR)/lib/pkgconfig/fmt.pc \
+				 $(CONTRIB_INSTALL_DIR)/lib/libfmt.a
 	make VERBOSE=1 -C $(XDG_BUILDDIR) install
 
 cleanall_xdg: | $(XDG_BUILDDIR)/Makefile
