@@ -136,9 +136,6 @@ MeshTally::MeshTally(const InputParameters & parameters)
     if (isParamSetByUser("block"))
       paramError("block", "Cannot use subdomain restriction when using XDG mesh tallies!");
 
-    if (_openmc_problem.scaling() != 1.0)
-      mooseError("XDG mesh tallies cannot be scaled!");
-
     // Gather all element types in the mesh.
     std::set<ElemType> contained_elem;
     auto begin = _openmc_problem.getMooseMesh().activeLocalElementsBegin();
@@ -208,7 +205,9 @@ MeshTally::spatialFilter()
       _xdg_mesh_manager->parse_metadata();
 
       _xdg_instance.reset(new xdg::XDG(_xdg_mesh_manager, xdg::RTLibrary::EMBREE));
-      openmc::model::meshes.emplace_back(std::make_unique<openmc::XDGMesh>(_xdg_instance));
+      auto xdg_mesh = std::make_unique<openmc::XDGMesh>(_xdg_instance);
+      xdg_mesh->set_length_multiplier(_openmc_problem.scaling());
+      openmc::model::meshes.emplace_back(std::move(xdg_mesh));
     }
     else
     {
