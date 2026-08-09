@@ -1,7 +1,7 @@
 [submodule "contrib/openmc"]
 	path = contrib/openmc
-	url = https://github.com/pshriwise/openmc.git
-	branch = xdg-mesh
+	url = https://github.com/nuclearkevin/openmc.git
+	branch = dynamic_rr_temp
 [submodule "contrib/nekRS"]
 	path = contrib/nekRS
 	url = https://github.com/neams-th-coe/nekRS.git
