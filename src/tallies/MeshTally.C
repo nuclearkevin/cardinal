@@ -24,11 +24,6 @@
 
 #ifdef ENABLE_XDG
 #include "openmc/xdg.h"
-
-// For cell-under-voxel subdivision.
-#include "openmc/random_ray/flat_source_domain.h"
-#include "openmc/geometry.h"
-#include "openmc/universe.h"
 #endif
 
 registerMooseObject("CardinalApp", MeshTally);
@@ -144,27 +139,13 @@ MeshTally::MeshTally(const InputParameters & parameters)
     if (_openmc_problem.scaling() != 1.0)
       mooseError("XDG mesh tallies cannot be scaled!");
 
-    // Gather all element types in the mesh.
-    std::set<ElemType> contained_elem;
-    auto begin = _openmc_problem.getMooseMesh().activeLocalElementsBegin();
-    auto end = _openmc_problem.getMooseMesh().activeLocalElementsEnd();
-    for (const auto & elem : libMesh::as_range(begin, end))
-      contained_elem.insert(elem->type());
-
-    // Check to make sure the mesh only contains a single element type.
-    if (contained_elem.size() > 1)
-      paramError("use_xdg",
-                 "XDG mesh tallies only support single-element meshes! Either "
-                 "ensure your mesh uses a single element type, or set "
-                 "'use_xdg = false'.");
-
-    // Check to make sure all elements are TET4s or HEX8s.
-    for (auto elem_type : contained_elem)
-      if (elem_type != ElemType::TET4 && elem_type != ElemType::HEX8)
-        paramError("use_xdg",
-                   "XDG mesh tallies only support TET4 and HEX8 elements! Either "
-                   "ensure your mesh only uses either TET4 or HEX8 elements, or set "
-                   "'use_xdg = false'.");
+    // Check to make sure the problem is setting up XDG.
+    if (!_openmc_problem.usingXDG() && !_mesh_template_filename)
+      paramError(
+        "use_xdg",
+        "To use XDG mesh tallies on the mesh mirror, your OpenMCCellAverageProblem must "
+        "be adding an XDG instance. Either set 'use_xdg = true' in your "
+        "OpenMCCellAverageProblem, or set 'use_xdg = false' in your MeshTally.");
   }
 #endif
 
@@ -225,16 +206,7 @@ MeshTally::spatialFilter()
     }
 
 #ifdef ENABLE_XDG
-    if (_use_xdg)
-    {
-      _xdg_mesh_manager.reset(new xdg::LibMeshManager(msh));
-      _xdg_mesh_manager->init();
-      _xdg_mesh_manager->parse_metadata();
-
-      _xdg_instance.reset(new xdg::XDG(_xdg_mesh_manager, xdg::RTLibrary::EMBREE));
-      openmc::model::meshes.emplace_back(std::make_unique<openmc::XDGMesh>(_xdg_instance));
-    }
-    else
+    if (!_use_xdg)
     {
       openmc::model::meshes.emplace_back(std::make_unique<openmc::AdaptiveLibMesh>(
         _openmc_problem.getMooseMesh().getMesh(), _openmc_problem.scaling(), _tally_blocks));
@@ -263,24 +235,31 @@ MeshTally::spatialFilter()
 #endif
   }
 
+#ifdef ENABLE_XDG
+  if (_use_xdg && !_mesh_template_filename)
+  {
+    // Fetch the mesh index from the problem.
+    _mesh_index = _openmc_problem.getXDGMeshIndex();
+  }
+  else
+  {
+    _mesh_index = openmc::model::meshes.size() - 1;
+    auto mesh_template =
+        dynamic_cast<openmc::UnstructuredMesh *>(openmc::model::meshes[_mesh_index].get());
+
+    // by setting the ID to -1, OpenMC will automatically detect the next available ID
+    mesh_template->set_id(-1);
+    mesh_template->output_ = false;
+  }
+#else
   _mesh_index = openmc::model::meshes.size() - 1;
-  _mesh_template =
+  auto mesh_template =
       dynamic_cast<openmc::UnstructuredMesh *>(openmc::model::meshes[_mesh_index].get());
 
   // by setting the ID to -1, OpenMC will automatically detect the next available ID
-  _mesh_template->set_id(-1);
-  _mesh_template->output_ = false;
-
-#ifdef ENABLE_XDG
-  // Use the mesh for cell-under-voxel subdivision if running the random ray solver
-  if (_openmc_problem.runRandomRay() && _use_xdg)
-  {
-    auto root_uni_id = openmc::model::universes[openmc::model::root_universe]->id_;
-    openmc::FlatSourceDomain::mesh_domain_map_[_mesh_template->id()].emplace_back(
-      openmc::Source::DomainType::UNIVERSE, root_uni_id);
-  }
+  mesh_template->set_id(-1);
+  mesh_template->output_ = false;
 #endif
-
   _mesh_filter = dynamic_cast<openmc::MeshFilter *>(openmc::Filter::create("mesh"));
   _mesh_filter->set_mesh(_mesh_index);
   _mesh_filter->set_translation({_mesh_translation(0), _mesh_translation(1), _mesh_translation(2)});
@@ -296,12 +275,13 @@ MeshTally::resetTally()
 {
   TallyBase::resetTally();
 
-  // Erase the OpenMC mesh.
+  // Erase the OpenMC mesh if required.
 #ifdef ENABLE_XDG
-  if (_openmc_problem.runRandomRay() && _use_xdg)
-    openmc::FlatSourceDomain::mesh_domain_map_.erase(_mesh_template->id());
-#endif
+  if (!(_use_xdg && !_mesh_template_filename))
+    openmc::model::meshes.erase(openmc::model::meshes.begin() + _mesh_index);
+#else
   openmc::model::meshes.erase(openmc::model::meshes.begin() + _mesh_index);
+#endif
 }
 
 void
@@ -328,6 +308,8 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
                              const std::vector<OMCTensor> & tally_vals,
                              bool norm_by_src_rate)
 {
+  auto mesh_template = dynamic_cast<openmc::UnstructuredMesh *>(openmc::model::meshes[_mesh_index].get());
+
   Real total = 0.0;
 
   unsigned int mesh_offset = _instance * _mesh_filter->n_bins();
@@ -345,7 +327,7 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
       volumetric_tally *= norm_by_src_rate
                               ? _openmc_problem.tallyMultiplier(_tally_score[local_score],
                                                                 _local_mean_tally[local_score]) /
-                                    _mesh_template->volume(e) * _openmc_problem.scaling() *
+                                    mesh_template->volume(e) * _openmc_problem.scaling() *
                                     _openmc_problem.scaling() * _openmc_problem.scaling()
                               : 1.0;
       total += _ext_bins_to_skip[ext_bin] ? 0.0 : unnormalized_tally;
@@ -362,6 +344,8 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
 void
 MeshTally::checkMeshTemplateAndTranslations()
 {
+  auto mesh_template = dynamic_cast<openmc::UnstructuredMesh *>(openmc::model::meshes[_mesh_index].get());
+
   // we can do some rudimentary checking on the mesh template by comparing the centroid
   // coordinates compared to centroids in the [Mesh] (because right now, we just doing a simple
   // copy transfer that necessitates the meshes to have the same elements in the same order). In
@@ -377,7 +361,7 @@ MeshTally::checkMeshTemplateAndTranslations()
     if (!elem_ptr)
       continue;
 
-    const auto pt = _mesh_template->centroid(e);
+    const auto pt = mesh_template->centroid(e);
     Point centroid_template = {pt[0], pt[1], pt[2]};
 
     // The translation applied in OpenMC isn't actually registered in the mesh itself;

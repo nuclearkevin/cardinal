@@ -23,11 +23,6 @@
 
 #include "openmc/tallies/filter_mesh.h"
 
-#ifdef ENABLE_XDG
-#include "xdg/xdg.h"
-#include "xdg/mesh_managers.h"
-#endif
-
 namespace libMesh
 {
 class ReplicatedMesh;
@@ -110,9 +105,6 @@ protected:
   /// OpenMC mesh filter for this unstructured mesh tally.
   openmc::MeshFilter * _mesh_filter;
 
-  /// OpenMC unstructured mesh instance for use with mesh tallies
-  openmc::UnstructuredMesh * _mesh_template;
-
   /// Whether we're using an indirection layer to map between the OpenMC mesh tally and the MOOSE mesh.
   const bool _use_dof_map;
 
@@ -122,10 +114,5 @@ protected:
 #ifdef ENABLE_XDG
   /// Whether this mesh tally should use XDG or not.
   const bool _use_xdg;
-
-  /// The XDG mesh manager representing this mesh.
-  std::shared_ptr<xdg::LibMeshManager> _xdg_mesh_manager;
-  /// The XDG instance used for this mesh tally.
-  std::shared_ptr<xdg::XDG> _xdg_instance;
 #endif
 };

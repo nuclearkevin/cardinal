@@ -40,6 +40,12 @@
 #include "openmc/tallies/tally.h"
 #include "openmc/tallies/filter_cell_instance.h"
 
+// For XDG cell-under-voxel subdivision.
+#ifdef ENABLE_XDG
+#include "openmc/xdg.h"
+#include "xdg/mesh_managers.h"
+#endif
+
 // Forward declarations to avoid cyclic dependencies.
 class OpenMCNuclideDensities;
 class OpenMCDomainFilterEditor;
@@ -175,7 +181,7 @@ public:
   /// Set up an OpenMC simulation.
   virtual void initialSetup() override;
 
-  /// Set the 'mesh changed' adaptivity flag.
+  /// Set the 'mesh changed' adaptivity flag and setup the XDG instance.
   virtual void syncSolutions(ExternalProblem::Direction direction) override;
   virtual bool adaptMesh() override;
 
@@ -425,6 +431,26 @@ public:
    */
   const openmc::Tally & getMGBetaTally();
 
+#ifdef ENABLE_XDG
+  /**
+   * Check to see if we're creating an XDG instance or not.
+   * @return whether the problem has set up XDG or not.
+   */
+  bool usingXDG() const { return _use_xdg; }
+
+  /**
+   * Check whether we're using XDG cell under voxel decomposition.
+   * @return whether the problem has set up cell-under-voxel subdivision or not.
+   */
+  bool xdgCellUnderVoxel() const { return _xdg_cell_under_voxel; }
+
+  /**
+   * Get the XDG instance.
+   * @return the XDG instance managed by this problem.
+   */
+  int32_t getXDGMeshIndex() const { return _xdg_mesh_index; }
+#endif
+
 protected:
   /// A virtual function to allow for execution prior to each step in a criticality search.
   virtual void critSearchStep() = 0;
@@ -475,6 +501,29 @@ protected:
     return openmc::settings::path_output + "initial_source_" +
            std::to_string(_fixed_point_iteration) + ".h5";
   }
+
+#ifdef ENABLE_XDG
+  /**
+   * Whether an XDG instance should be created or not.
+   */
+  const bool _use_xdg;
+
+  /**
+   * Whether we should use our mesh (through XDG) for cell-under-voxel decomposition
+   * in the random ray solver.
+   */
+  const bool _xdg_cell_under_voxel;
+
+  /// The XDG mesh manager representing this mesh.
+  std::shared_ptr<xdg::LibMeshManager> _xdg_mesh_manager;
+
+  /// The XDG instance used for this mesh tally.
+  std::shared_ptr<xdg::XDG> _xdg_instance;
+
+  /// The index of the XDG mesh.
+  int32_t _xdg_mesh_index;
+  int32_t _xdg_mesh_id;
+#endif
 
   /// Whether to print diagnostic information about model setup and the transfers
   const bool & _verbose;

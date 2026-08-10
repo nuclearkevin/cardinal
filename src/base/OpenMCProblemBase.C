@@ -39,6 +39,13 @@
 // For random ray settings.
 #include "openmc/random_ray/random_ray.h"
 
+// For XDG cell-under-voxel subdivision.
+#ifdef ENABLE_XDG
+#include "openmc/random_ray/flat_source_domain.h"
+#include "openmc/geometry.h"
+#include "openmc/universe.h"
+#endif
+
 InputParameters
 OpenMCProblemBase::validParams()
 {
@@ -116,12 +123,31 @@ OpenMCProblemBase::validParams()
       "active_distance > 0",
       "The active length (distance a ray travels while accumulating tallies) used "
       "for random ray; this overrides the setting in the XML files.");
+#ifdef ENABLE_XDG
+  params.addParam<bool>(
+      "use_xdg",
+      false,
+      "Whether an XDG instance should be created to enable various features "
+      "that require XDG. This includes XDG-based cell-under-voxel decomposition "
+      "and XDG-based mesh tallies.");
+  params.addParam<bool>(
+      "xdg_cell_under_voxel",
+      false,
+      "Whether the unstructured mesh should be used for cell-under-voxel "
+      "decomposition in the random ray solver. This only works when Cardinal "
+      "has been built with XDG support. This must be set to 'true' to use "
+      "XDG unstructured mesh tallies with the random ray solver.");
+#endif
   return params;
 }
 
 OpenMCProblemBase::OpenMCProblemBase(const InputParameters & params)
   : CardinalProblem(params),
     PostprocessorInterface(this),
+#ifdef ENABLE_XDG
+    _use_xdg(getParam<bool>("use_xdg")),
+    _xdg_cell_under_voxel(getParam<bool>("xdg_cell_under_voxel")),
+#endif
     _verbose(getParam<bool>("verbose")),
     _reuse_source(getParam<bool>("reuse_source")),
     _specified_scaling(params.isParamSetByUser("scaling")),
@@ -264,6 +290,51 @@ OpenMCProblemBase::OpenMCProblemBase(const InputParameters & params)
       paramError("ifp_generations",
                  "'ifp_generations' must be less than or equal to the number of inactive batches!");
   }
+
+#ifdef ENABLE_XDG
+  if (_use_xdg)
+  {
+    if (scaling() != 1.0)
+      mooseError("XDG meshes cannot be scaled!");
+
+    // Gather all element types in the mesh.
+    std::set<ElemType> contained_elem;
+    auto begin = mesh().activeLocalElementsBegin();
+    auto end = mesh().activeLocalElementsEnd();
+    for (const auto & elem : libMesh::as_range(begin, end))
+      contained_elem.insert(elem->type());
+
+    // Check to make sure the mesh only contains a single element type.
+    if (contained_elem.size() > 1)
+      paramError("use_xdg",
+                 "XDG only supports single-element meshes! Either "
+                 "ensure your mesh uses a single element type, or set "
+                 "'use_xdg = false'.");
+
+    // Check to make sure all elements are TET4s or HEX8s.
+    for (auto elem_type : contained_elem)
+      if (elem_type != ElemType::TET4 && elem_type != ElemType::HEX8)
+        paramError("use_xdg",
+                   "XDG only supports TET4 and HEX8 elements! Either "
+                   "ensure your mesh only uses either TET4 or HEX8 elements, or set "
+                   "'use_xdg = false'.");
+  }
+
+  // Error checks for XDG cell-under-voxel decomposition.
+  if (_xdg_cell_under_voxel)
+  {
+    if (!_use_xdg)
+      paramError(
+        "use_mesh_for_cell_under_voxel",
+        "XDG mesh cell-under-voxel decomposition can only be used when using XDG!");
+
+    if (!runRandomRay())
+      paramError(
+        "use_mesh_for_cell_under_voxel",
+        "XDG mesh cell-under-voxel decomposition can only be used when running the "
+        "random ray solver!");
+  }
+#endif
 }
 
 OpenMCProblemBase::~OpenMCProblemBase() { openmc_finalize(); }
@@ -471,6 +542,44 @@ OpenMCProblemBase::initialSetup()
   mm_query.queryInto(mm_objs);
   for (const auto & m : mm_objs)
     m->modifyOpenMCModel();
+
+#ifdef ENABLE_XDG
+  if (_use_xdg)
+  {
+    auto msh =
+        dynamic_cast<const libMesh::ReplicatedMesh *>(mesh().getMeshPtr());
+    if (!msh)
+      mooseError("Internal error: The mesh is not a replicated mesh.");
+
+    // Build the mesh.
+    _xdg_mesh_manager = std::make_shared<xdg::LibMeshManager>(msh);
+    _xdg_mesh_manager->init();
+    _xdg_mesh_manager->parse_metadata();
+
+    // Build the XDG instance.
+    _xdg_instance = std::make_shared<xdg::XDG>(_xdg_mesh_manager, xdg::RTLibrary::EMBREE);
+    _xdg_instance->prepare_raytracer();
+
+    // Build the XDGMesh.
+    openmc::model::meshes.emplace_back(std::make_unique<openmc::XDGMesh>(_xdg_instance));
+    _xdg_mesh_index = openmc::model::meshes.size() - 1;
+
+    auto mesh_template =
+      dynamic_cast<openmc::UnstructuredMesh *>(openmc::model::meshes[_xdg_mesh_index].get());
+    mesh_template->set_id(-1);
+    mesh_template->output_ = false;
+
+    _xdg_mesh_id = mesh_template->id();
+  }
+
+  if (runRandomRay() && _xdg_cell_under_voxel)
+  {
+    // Setup for cell-under-voxel subdivision.
+    auto root_uni_id = openmc::model::universes[openmc::model::root_universe]->id_;
+    openmc::FlatSourceDomain::mesh_domain_map_[_xdg_mesh_id].emplace_back(
+      openmc::Source::DomainType::UNIVERSE, root_uni_id);
+  }
+#endif
 }
 
 void
@@ -479,6 +588,41 @@ OpenMCProblemBase::syncSolutions(ExternalProblem::Direction direction)
   // Always run OpenMC on the first timestep in a steady solve with adaptivity. This
   // ensures that OpenMC runs at least once during each Picard iteration.
   _run_on_adaptivity_cycle |= (timeStep() == 1 && !isTransient());
+
+#ifdef ENABLE_XDG
+  // The mesh may have changed, so we need to reset the XDG instance.
+  if (_use_xdg && direction == ExternalProblem::Direction::TO_EXTERNAL_APP)
+  {
+    // Clear out the XDGMesh to get rid of the shared pointer associated with it.
+    openmc::model::meshes[_xdg_mesh_index].reset();
+    // Reset the last shared pointers to finally clear memory.
+    _xdg_instance.reset();
+    _xdg_mesh_manager.reset();
+    openmc::model::mesh_map.erase(_xdg_mesh_id);
+
+    auto msh =
+        dynamic_cast<const libMesh::ReplicatedMesh *>(mesh().getMeshPtr());
+    if (!msh)
+      mooseError("Internal error: The mesh is not a replicated mesh.");
+
+    // Recreate the mesh.
+    _xdg_mesh_manager = std::make_shared<xdg::LibMeshManager>(msh);
+    _xdg_mesh_manager->init();
+    _xdg_mesh_manager->parse_metadata();
+
+    // Recreate the XDG instance.
+    _xdg_instance = std::make_shared<xdg::XDG>(_xdg_mesh_manager, xdg::RTLibrary::EMBREE);
+    _xdg_instance->prepare_raytracer();
+
+    // Finally, recreate the XDG mesh. Since we restore the old mesh ID we
+    // assigned during initialSetup(), we don't need to re-do the cell-under-voxel setup.
+    openmc::model::meshes[_xdg_mesh_index].reset(new openmc::XDGMesh(_xdg_instance));
+    auto mesh_template =
+      dynamic_cast<openmc::UnstructuredMesh *>(openmc::model::meshes[_xdg_mesh_index].get());
+    mesh_template->set_id(_xdg_mesh_id);
+    mesh_template->output_ = false;
+  }
+#endif
 }
 
 bool
