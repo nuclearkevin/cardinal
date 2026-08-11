@@ -941,6 +941,12 @@ protected:
    */
   const bool _dynamic_random_ray_temperature;
 
+  /// Cached sub point locators for the dynamic random ray temperature treatment.
+  std::vector<std::unique_ptr<libMesh::PointLocatorBase>> _point_locators;
+
+  /// A set of temperature blocks. Cached to speed up point location.
+  std::set<SubdomainID> _temperature_blocks_set;
+
   /// Whether any cell tallies exist.
   bool _has_cell_tallies = false;
 

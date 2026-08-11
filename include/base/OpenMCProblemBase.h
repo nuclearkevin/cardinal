@@ -176,7 +176,7 @@ public:
   std::string estimatorToString(openmc::TallyEstimator estimator) const;
 
   /// Run an OpenMC simulation
-  void externalSolve() override;
+  virtual void externalSolve() override;
 
   /// Set up an OpenMC simulation.
   virtual void initialSetup() override;

@@ -295,6 +295,10 @@ OpenMCProblemBase::OpenMCProblemBase(const InputParameters & params)
     if (scaling() != 1.0)
       mooseError("XDG meshes cannot be scaled!");
 
+    // Make sure the mesh is replicated.
+    if (!mesh().getMesh().is_replicated())
+      mooseError("XDG is only supported with replicated meshes at present!");
+
     // Gather all element types in the mesh.
     std::set<ElemType> contained_elem;
     auto begin = mesh().activeLocalElementsBegin();

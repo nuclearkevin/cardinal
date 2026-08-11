@@ -412,6 +412,7 @@ OpenMCCellAverageProblem::OpenMCCellAverageProblem(const InputParameters & param
         params, "check_identical_cell_fills", "'identical_cell_fills' is not specified");
 
   readBlockVariables("temperature", "temp", _temp_vars_to_blocks, _temp_blocks);
+  _temperature_blocks_set = std::set<SubdomainID>(_temp_blocks.begin(), _temp_blocks.end());
   readBlockVariables("density", "density", _density_vars_to_blocks, _density_blocks);
 
   // When running in multi-group mode, the user needs to provide a reference density if density
@@ -743,7 +744,7 @@ OpenMCCellAverageProblem::initialSetup()
     if (!runRandomRay())
       paramError(
           "random_ray_dynamic_temperature",
-          "The dynamic temperature treaetment can only be applied to the random ray solver!");
+          "The dynamic temperature treatment can only be applied to the random ray solver!");
 
     if (!_specified_temperature_feedback)
       paramError(
@@ -757,13 +758,40 @@ OpenMCCellAverageProblem::initialSetup()
           "Can only use the dynamic temperature treatment if unstructured mesh cell-under-voxel "
           "decomposition is being applied!");
 
-    openmc::FlatSourceDomain::use_dynamic_temp_treatment_ = true;
+    // Cache point locators to avoid building them again.
+    for (int i = 0; i < libMesh::n_threads(); i++) {
+      _point_locators.emplace_back(mesh().getMesh().sub_point_locator());
+      _point_locators.back()->set_contains_point_tol(openmc::FP_COINCIDENT);
+      _point_locators.back()->enable_out_of_mesh_mode();
+    }
+
+    // Note: this callback assumes the system has been serialized while OpenMC is running.
+    // TODO: use MPI communication to allow for distributed auxvariables.
     openmc::FlatSourceDomain::dynamic_temp_callback_ =
       [&](const double & x, const double & y, const double & z, bool & found)
     {
-      found = false;
-      return 0.0;
+      // Find the element associated with a point. A set of temperature blocks is
+      // passed into the point locator to restrict the search to blocks with
+      // temperature feedback.
+      const auto & point_locator = _point_locators.at(openmc::thread_num());
+      const auto elem_ptr = (*point_locator)(libMesh::Point(x, y, z), &_temperature_blocks_set);
+
+      // Point with feedback doesn't exist in the mesh. Set found to false and return 0.
+      if (!elem_ptr)
+      {
+        found = false;
+        return 0.0;
+      }
+
+      // Point with temperature feedback exists. Fetch the temperature data.
+      found = true;
+      auto var = _subdomain_to_temp_vars.at(elem_ptr->subdomain_id()).first;
+      auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
+      Real temp = _serialized_solution(dof_idx);
+      std::cout << "Setting source region temperature to " << temp << std::endl;
+      return temp;
     };
+    openmc::FlatSourceDomain::use_dynamic_temp_treatment_ = true;
   }
 #endif
 }
@@ -2389,7 +2417,18 @@ OpenMCCellAverageProblem::externalSolve()
     }
   }
 
+  // Serialize the auxsystem for the dynamic temperature treatment.
+  if (_dynamic_random_ray_temperature)
+    _aux->serializeSolution();
+
   OpenMCProblemBase::externalSolve();
+
+  // Undo serialization.
+  if (_dynamic_random_ray_temperature)
+  {
+    _aux->solution().close();
+    _aux->system().update();
+  }
 }
 
 std::map<OpenMCCellAverageProblem::cellInfo, Real>
