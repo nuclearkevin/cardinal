@@ -934,6 +934,13 @@ protected:
    */
   const bool _specified_temperature_feedback;
 
+  /**
+   * Whether the random ray solver should use a dynamic temperature treatment or not.
+   * This queries Cardinal (with a callback) for temperatures as source regions are
+   * discovered.
+   */
+  const bool _dynamic_random_ray_temperature;
+
   /// Whether any cell tallies exist.
   bool _has_cell_tallies = false;
 

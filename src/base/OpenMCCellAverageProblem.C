@@ -42,6 +42,7 @@
 #include "openmc/mgxs_interface.h"
 #include "openmc/nuclide.h"
 #include "openmc/random_lcg.h"
+#include "openmc/random_ray/flat_source_domain.h"
 #include "openmc/settings.h"
 #include "openmc/summary.h"
 #include "openmc/tallies/trigger.h"
@@ -118,6 +119,12 @@ OpenMCCellAverageProblem::validParams()
       "temperature_blocks",
       "Blocks corresponding to each of the 'temperature_variables'. If not specified, "
       "there will be no temperature feedback to OpenMC.");
+#ifdef ENABLE_XDG
+  params.addParam<bool>(
+      "random_ray_dynamic_temperature",
+      false,
+      "Whether random ray source regions should use a dynamic temperature treatment or not.");
+#endif
 
   params.addParam<std::vector<std::vector<std::string>>>(
       "density_variables",
@@ -207,6 +214,7 @@ OpenMCCellAverageProblem::OpenMCCellAverageProblem(const InputParameters & param
     _assume_separate_tallies(getParam<bool>("assume_separate_tallies")),
     _specified_density_feedback(params.isParamSetByUser("density_blocks")),
     _specified_temperature_feedback(params.isParamSetByUser("temperature_blocks")),
+    _dynamic_random_ray_temperature(getParam<bool>("random_ray_dynamic_temperature")),
     _needs_to_map_cells(_specified_density_feedback || _specified_temperature_feedback),
     _volume_calc(nullptr),
     _symmetry(nullptr),
@@ -725,6 +733,37 @@ OpenMCCellAverageProblem::initialSetup()
     // from the [Mesh] (bypassing the .h5m), we would not need this error check.
     _skinner->setMaterialNames(getMaterialInEachSubdomain());
     _skinner->initialize();
+  }
+#endif
+
+#ifdef ENABLE_XDG
+  // Prepare for the dynamic temperature treatment.
+  if (_dynamic_random_ray_temperature)
+  {
+    if (!runRandomRay())
+      paramError(
+          "random_ray_dynamic_temperature",
+          "The dynamic temperature treaetment can only be applied to the random ray solver!");
+
+    if (!_specified_temperature_feedback)
+      paramError(
+          "random_ray_dynamic_temperature",
+          "Can only use the dynamic temperature treatment if temperature feedback is being "
+          "used.");
+
+    if (!_xdg_cell_under_voxel)
+      paramError(
+          "random_ray_dynamic_temperature",
+          "Can only use the dynamic temperature treatment if unstructured mesh cell-under-voxel "
+          "decomposition is being applied!");
+
+    openmc::FlatSourceDomain::use_dynamic_temp_treatment_ = true;
+    openmc::FlatSourceDomain::dynamic_temp_callback_ =
+      [&](const double & x, const double & y, const double & z, bool & found)
+    {
+      found = false;
+      return 0.0;
+    };
   }
 #endif
 }

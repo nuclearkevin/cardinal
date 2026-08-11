@@ -40,11 +40,9 @@
 #include "openmc/random_ray/random_ray.h"
 
 // For XDG cell-under-voxel subdivision.
-#ifdef ENABLE_XDG
 #include "openmc/random_ray/flat_source_domain.h"
 #include "openmc/geometry.h"
 #include "openmc/universe.h"
-#endif
 
 InputParameters
 OpenMCProblemBase::validParams()

@@ -277,7 +277,7 @@ MeshTally::resetTally()
 
   // Erase the OpenMC mesh if required.
 #ifdef ENABLE_XDG
-  if (!(_use_xdg && !_mesh_template_filename))
+  if (!_use_xdg || _mesh_template_filename)
     openmc::model::meshes.erase(openmc::model::meshes.begin() + _mesh_index);
 #else
   openmc::model::meshes.erase(openmc::model::meshes.begin() + _mesh_index);
