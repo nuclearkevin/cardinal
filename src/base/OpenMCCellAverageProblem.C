@@ -768,7 +768,7 @@ OpenMCCellAverageProblem::initialSetup()
     // Note: this callback assumes the system has been serialized while OpenMC is running.
     // TODO: use MPI communication to allow for distributed auxvariables.
     openmc::FlatSourceDomain::dynamic_temp_callback_ =
-      [&](const double & x, const double & y, const double & z, bool & found)
+      [&](const double & x, const double & y, const double & z, double & temperature)
     {
       // Find the element associated with a point. A set of temperature blocks is
       // passed into the point locator to restrict the search to blocks with
@@ -776,20 +776,18 @@ OpenMCCellAverageProblem::initialSetup()
       const auto & point_locator = _point_locators.at(openmc::thread_num());
       const auto elem_ptr = (*point_locator)(libMesh::Point(x, y, z), &_temperature_blocks_set);
 
-      // Point with feedback doesn't exist in the mesh. Set found to false and return 0.
+      // Point with feedback doesn't exist in the mesh. Set temperature to 0 and return false.
       if (!elem_ptr)
       {
-        found = false;
-        return 0.0;
+        temperature = 0.0;
+        return false;
       }
 
-      // Point with temperature feedback exists. Fetch the temperature data.
-      found = true;
+      // Point with temperature feedback exists. Set the temperature and return true.
       auto var = _subdomain_to_temp_vars.at(elem_ptr->subdomain_id()).first;
       auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
-      Real temp = _serialized_solution(dof_idx);
-      std::cout << "Setting source region temperature to " << temp << std::endl;
-      return temp;
+      temperature = _serialized_solution(dof_idx);
+      return true;
     };
     openmc::FlatSourceDomain::use_dynamic_temp_treatment_ = true;
   }
