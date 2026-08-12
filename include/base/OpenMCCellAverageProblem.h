@@ -941,11 +941,21 @@ protected:
    */
   const bool _dynamic_random_ray_temperature;
 
-  /// Cached sub point locators for the dynamic random ray temperature treatment.
+  /**
+   * Whether the random ray solver should use a dynamic density treatment or not.
+   * This queries Cardinal (with a callback) for density multipliers as source
+   * regions are discovered.
+   */
+  const bool _dynamic_random_ray_density;
+
+  /// Cached sub point locators for the dynamic random ray temperature/density treatment.
   std::vector<std::unique_ptr<libMesh::PointLocatorBase>> _point_locators;
 
-  /// A set of temperature blocks. Cached to speed up point location.
+  /// A set of temperature feedback blocks. Cached to speed up point location.
   std::set<SubdomainID> _temperature_blocks_set;
+
+  /// A set of density feedback blocks. Cached to speed up point location.
+  std::set<SubdomainID> _density_blocks_set;
 
   /// Whether any cell tallies exist.
   bool _has_cell_tallies = false;

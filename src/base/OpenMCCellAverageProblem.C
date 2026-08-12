@@ -124,6 +124,10 @@ OpenMCCellAverageProblem::validParams()
       "random_ray_dynamic_temperature",
       false,
       "Whether random ray source regions should use a dynamic temperature treatment or not.");
+  params.addParam<bool>(
+      "random_ray_dynamic_density",
+      false,
+      "Whether random ray source regions should use a dynamic density treatment or not.");
 #endif
 
   params.addParam<std::vector<std::vector<std::string>>>(
@@ -215,6 +219,7 @@ OpenMCCellAverageProblem::OpenMCCellAverageProblem(const InputParameters & param
     _specified_density_feedback(params.isParamSetByUser("density_blocks")),
     _specified_temperature_feedback(params.isParamSetByUser("temperature_blocks")),
     _dynamic_random_ray_temperature(getParam<bool>("random_ray_dynamic_temperature")),
+    _dynamic_random_ray_density(getParam<bool>("random_ray_dynamic_density")),
     _needs_to_map_cells(_specified_density_feedback || _specified_temperature_feedback),
     _volume_calc(nullptr),
     _symmetry(nullptr),
@@ -414,6 +419,7 @@ OpenMCCellAverageProblem::OpenMCCellAverageProblem(const InputParameters & param
   readBlockVariables("temperature", "temp", _temp_vars_to_blocks, _temp_blocks);
   _temperature_blocks_set = std::set<SubdomainID>(_temp_blocks.begin(), _temp_blocks.end());
   readBlockVariables("density", "density", _density_vars_to_blocks, _density_blocks);
+  _density_blocks_set = std::set<SubdomainID>(_density_blocks.begin(), _density_blocks.end());
 
   // When running in multi-group mode, the user needs to provide a reference density if density
   // feedback is specified (to convert to the dimensionless MGXS density). In the future, it would
@@ -738,35 +744,73 @@ OpenMCCellAverageProblem::initialSetup()
 #endif
 
 #ifdef ENABLE_XDG
+  // Note: these callback assumes the system has been serialized while OpenMC is running.
+  // TODO: use MPI communication to allow for distributed auxvariables.
+
+  // Prepare for the dynamic density treatment.
+  if (_dynamic_random_ray_density)
+  {
+    if (!runRandomRay())
+      paramError(
+        "random_ray_dynamic_density",
+        "The dynamic density treatment can only be applied to the random ray solver!");
+
+    if (!_specified_density_feedback)
+      paramError(
+        "random_ray_dynamic_density",
+        "Can only use the dynamic density treatment if density feedback is being "
+        "used.");
+
+    if (!_xdg_cell_under_voxel)
+      paramError(
+        "random_ray_dynamic_density",
+        "Can only use the dynamic density treatment if unstructured mesh cell-under-voxel "
+        "decomposition is being applied!");
+
+    openmc::FlatSourceDomain::dynamic_density_callback_ =
+      [&](const double & x, const double & y, const double & z, double & density_mult)
+    {
+      // Find the element associated with a point. A set of density blocks is
+      // passed into the point locator to restrict the search to blocks with
+      // density feedback.
+      const auto & point_locator = _point_locators.at(openmc::thread_num());
+      const auto elem_ptr = (*point_locator)(libMesh::Point(x, y, z), &_density_blocks_set);
+
+      // Point with feedback doesn't exist in the mesh. Return false.
+      if (!elem_ptr)
+        return false;
+
+      // Point with density feedback exists. Set the density multiplier and return true.
+      auto var = _subdomain_to_density_vars.at(elem_ptr->subdomain_id()).first;
+      auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
+      density_mult = _serialized_solution(dof_idx);
+      // Convert to multiplier.
+      density_mult /= _subdomain_to_ref_density.at(elem_ptr->subdomain_id());
+      return true;
+    };
+    openmc::FlatSourceDomain::use_dynamic_density_treatment_ = true;
+  }
+
   // Prepare for the dynamic temperature treatment.
   if (_dynamic_random_ray_temperature)
   {
     if (!runRandomRay())
       paramError(
-          "random_ray_dynamic_temperature",
-          "The dynamic temperature treatment can only be applied to the random ray solver!");
+        "random_ray_dynamic_temperature",
+        "The dynamic temperature treatment can only be applied to the random ray solver!");
 
     if (!_specified_temperature_feedback)
       paramError(
-          "random_ray_dynamic_temperature",
-          "Can only use the dynamic temperature treatment if temperature feedback is being "
-          "used.");
+        "random_ray_dynamic_temperature",
+        "Can only use the dynamic temperature treatment if temperature feedback is being "
+        "used.");
 
     if (!_xdg_cell_under_voxel)
       paramError(
-          "random_ray_dynamic_temperature",
-          "Can only use the dynamic temperature treatment if unstructured mesh cell-under-voxel "
-          "decomposition is being applied!");
+        "random_ray_dynamic_temperature",
+        "Can only use the dynamic temperature treatment if unstructured mesh cell-under-voxel "
+        "decomposition is being applied!");
 
-    // Cache point locators to avoid building them again.
-    for (int i = 0; i < libMesh::n_threads(); i++) {
-      _point_locators.emplace_back(mesh().getMesh().sub_point_locator());
-      _point_locators.back()->set_contains_point_tol(openmc::FP_COINCIDENT);
-      _point_locators.back()->enable_out_of_mesh_mode();
-    }
-
-    // Note: this callback assumes the system has been serialized while OpenMC is running.
-    // TODO: use MPI communication to allow for distributed auxvariables.
     openmc::FlatSourceDomain::dynamic_temp_callback_ =
       [&](const double & x, const double & y, const double & z, double & temperature)
     {
@@ -790,6 +834,17 @@ OpenMCCellAverageProblem::initialSetup()
       return true;
     };
     openmc::FlatSourceDomain::use_dynamic_temp_treatment_ = true;
+  }
+
+  // Cache point locators to avoid building them again.
+  if (_dynamic_random_ray_temperature || _dynamic_random_ray_density)
+  {
+    for (int i = 0; i < libMesh::n_threads(); i++)
+    {
+      _point_locators.emplace_back(mesh().getMesh().sub_point_locator());
+      _point_locators.back()->set_contains_point_tol(openmc::FP_COINCIDENT);
+      _point_locators.back()->enable_out_of_mesh_mode();
+    }
   }
 #endif
 }
