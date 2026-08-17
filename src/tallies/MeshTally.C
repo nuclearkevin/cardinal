@@ -308,8 +308,6 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
                              const std::vector<OMCTensor> & tally_vals,
                              bool norm_by_src_rate)
 {
-  auto mesh_template = dynamic_cast<openmc::UnstructuredMesh *>(openmc::model::meshes[_mesh_index].get());
-
   Real total = 0.0;
 
   unsigned int mesh_offset = _instance * _mesh_filter->n_bins();
@@ -317,6 +315,9 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
   {
     for (decltype(_mesh_filter->n_bins()) e = 0; e < _mesh_filter->n_bins(); ++e)
     {
+      auto elem_id = _use_dof_map ? _bin_to_element_mapping[e] : mesh_offset + e;
+      auto elem_ptr = _openmc_problem.getMooseMesh().queryElemPtr(elem_id);
+
       Real unnormalized_tally = tally_vals[local_score](ext_bin * _mesh_filter->n_bins() + e);
 
       // divide each tally by the volume that it corresponds to in MOOSE
@@ -327,13 +328,10 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
       volumetric_tally *= norm_by_src_rate
                               ? _openmc_problem.tallyMultiplier(_tally_score[local_score],
                                                                 _local_mean_tally[local_score]) /
-                                    mesh_template->volume(e) * _openmc_problem.scaling() *
-                                    _openmc_problem.scaling() * _openmc_problem.scaling()
-                              : 1.0;
+                                    elem_ptr->volume() : 1.0;
       total += _ext_bins_to_skip[ext_bin] ? 0.0 : unnormalized_tally;
 
       auto var = var_numbers[_num_ext_filter_bins * local_score + ext_bin];
-      auto elem_id = _use_dof_map ? _bin_to_element_mapping[e] : mesh_offset + e;
       fillElementalAuxVariable(var, {elem_id}, volumetric_tally);
     }
   }
