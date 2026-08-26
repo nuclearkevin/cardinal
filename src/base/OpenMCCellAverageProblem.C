@@ -118,6 +118,10 @@ OpenMCCellAverageProblem::validParams()
       "temperature_blocks",
       "Blocks corresponding to each of the 'temperature_variables'. If not specified, "
       "there will be no temperature feedback to OpenMC.");
+  params.addParam<bool>(
+      "delta_pointwise_temps",
+      false,
+      "Whether pointwise temperatures should be used if running with delta tracking.");
 
   params.addParam<std::vector<std::vector<std::string>>>(
       "density_variables",
@@ -207,6 +211,7 @@ OpenMCCellAverageProblem::OpenMCCellAverageProblem(const InputParameters & param
     _assume_separate_tallies(getParam<bool>("assume_separate_tallies")),
     _specified_density_feedback(params.isParamSetByUser("density_blocks")),
     _specified_temperature_feedback(params.isParamSetByUser("temperature_blocks")),
+    _delta_pointwise_temps(getParam<bool>("delta_pointwise_temps")),
     _needs_to_map_cells(_specified_density_feedback || _specified_temperature_feedback),
     _volume_calc(nullptr),
     _symmetry(nullptr),
@@ -404,6 +409,7 @@ OpenMCCellAverageProblem::OpenMCCellAverageProblem(const InputParameters & param
         params, "check_identical_cell_fills", "'identical_cell_fills' is not specified");
 
   readBlockVariables("temperature", "temp", _temp_vars_to_blocks, _temp_blocks);
+  _temperature_blocks_set = std::set<SubdomainID>(_temp_blocks.begin(), _temp_blocks.end());
   readBlockVariables("density", "density", _density_vars_to_blocks, _density_blocks);
 
   // When running in multi-group mode, the user needs to provide a reference density if density
@@ -727,6 +733,51 @@ OpenMCCellAverageProblem::initialSetup()
     _skinner->initialize();
   }
 #endif
+
+  if (_delta_pointwise_temps)
+  {
+    if (!openmc::settings::delta_tracking)
+      paramError("delta_pointwise_temps",
+                 "Pointwise temperatures can only be used when running delta tracking!");
+
+    if (!_specified_temperature_feedback)
+      mooseWarning("Not running with delta tracking! 'delta_pointwise_temps' is unused.");
+    else
+    {
+      openmc::settings::delta_use_pointwise_temp = true;
+      openmc::settings::delta_pointwise_callback =
+        [&](const double & x, const double & y, const double & z, double & temperature)
+      {
+        // Find the element associated with a point. A set of temperature blocks is
+        // passed into the point locator to restrict the search to blocks with
+        // temperature feedback.
+        const auto & point_locator = _point_locators.at(openmc::thread_num());
+        const auto elem_ptr = (*point_locator)(libMesh::Point(x, y, z), &_temperature_blocks_set);
+
+        // Point with feedback doesn't exist in the mesh. Set temperature to 0 and return false.
+        if (!elem_ptr)
+        {
+          temperature = 0.0;
+          return false;
+        }
+
+        // Point with temperature feedback exists. Set the temperature and return true.
+        // TODO: Handle basis functions, this assumes constant monomial.
+        auto var = _subdomain_to_temp_vars.at(elem_ptr->subdomain_id()).first;
+        auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
+        temperature = _serialized_solution(dof_idx);
+        return true;
+      };
+
+      // Cache point locators to avoid building them again.
+      for (int i = 0; i < libMesh::n_threads(); i++)
+      {
+        _point_locators.emplace_back(mesh().getMesh().sub_point_locator());
+        _point_locators.back()->set_contains_point_tol(openmc::FP_COINCIDENT);
+        _point_locators.back()->enable_out_of_mesh_mode();
+      }
+    }
+  }
 }
 
 std::vector<std::string>
@@ -2405,7 +2456,18 @@ OpenMCCellAverageProblem::externalSolve()
     }
   }
 
+  // Serialize the auxsystem for pointwise temperatures.
+  if (_delta_pointwise_temps)
+    _aux->serializeSolution();
+
   OpenMCProblemBase::externalSolve();
+
+  // Undo serialization.
+  if (_delta_pointwise_temps)
+  {
+    _aux->solution().close();
+    _aux->system().update();
+  }
 }
 
 std::map<OpenMCCellAverageProblem::cellInfo, Real>
