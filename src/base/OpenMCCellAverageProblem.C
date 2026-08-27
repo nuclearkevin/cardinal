@@ -740,10 +740,12 @@ OpenMCCellAverageProblem::initialSetup()
   }
 #endif
 
+  // Setup for the pointwise feedback treatment, if requested. This relies on delta tracking
+  // being used for transport.
   const bool valid_pw_temp = _delta_pointwise_temps && _specified_temperature_feedback;
   const bool valid_pw_density = _delta_pointwise_densities && _specified_density_feedback;
   const bool use_combined = valid_pw_temp && valid_pw_density;
-  // We can use the combined callback.
+  // We can use the combined callback to reduce the number of point locator calls.
   if (use_combined)
   {
     if (!openmc::settings::delta_tracking)
@@ -787,7 +789,7 @@ OpenMCCellAverageProblem::initialSetup()
         auto var = _subdomain_to_density_vars.at(elem_ptr->subdomain_id()).first;
         auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
         // Convert to g/cm3 from kg/m3
-        density = _serialized_solution(dof_idx) / 1000.0;
+        density = _serialized_solution(dof_idx) * OpenMCProblemBase::densityConversionFactor();
 
         found_density = true;
       }
@@ -827,47 +829,61 @@ OpenMCCellAverageProblem::initialSetup()
     openmc::settings::delta_use_pointwise_temp = true;
   }
 
-  if (valid_pw_density && !use_combined)
+  if (valid_pw_density)
   {
-    if (!openmc::settings::delta_tracking)
-      paramError("delta_pointwise_densities",
-                 "Pointwise densities can only be used when running delta tracking!");
-
-    openmc::settings::delta_density_pointwise_callback =
-      [&](const double & x, const double & y, const double & z, double & density)
+    // Set a callback to find the maximum density over the mesh.
+    openmc::settings::delta_max_density_callback = [&]()
     {
-      // Find the element associated with a point. A set of density blocks is
-      // passed into the point locator to restrict the search to blocks with
-      // density feedback.
-      const auto & point_locator = _point_locators.at(openmc::thread_num());
-      const auto elem_ptr = (*point_locator)(libMesh::Point(x, y, z), &_density_blocks_set);
-
-      // Point with feedback doesn't exist in the mesh. Set density to 0 and return false.
-      if (!elem_ptr)
+      double max_density = 0.0;
+      for (dof_id_type e = 0; e < getMooseMesh().nElem(); ++e)
       {
-        density = 0.0;
-        return false;
+        const auto * elem_ptr = getMooseMesh().queryElemPtr(e);
+        if (!elem_ptr)
+          continue;
+
+        if (!elem_ptr->active() || !_density_blocks_set.count(elem_ptr->subdomain_id()))
+          continue;
+
+        auto var = _subdomain_to_density_vars.at(elem_ptr->subdomain_id()).first;
+        auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
+        max_density = std::max(_serialized_solution(dof_idx), max_density);
       }
 
-      // Point with density feedback exists. Set the density and return true.
-      // TODO: Handle basis functions, this assumes constant monomial.
-      auto var = _subdomain_to_density_vars.at(elem_ptr->subdomain_id()).first;
-      auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
       // Convert to g/cm3 from kg/m3
-      density = _serialized_solution(dof_idx) / 1000.0;
-      return true;
+      return max_density * OpenMCProblemBase::densityConversionFactor();
     };
-    openmc::settings::delta_use_pointwise_density = true;
-  }
 
-  // Cache point locators to avoid building them again.
-  if (valid_pw_temp || valid_pw_density)
-  {
-    for (int i = 0; i < libMesh::n_threads(); i++)
+    if (!use_combined)
     {
-      _point_locators.emplace_back(mesh().getMesh().sub_point_locator());
-      _point_locators.back()->set_contains_point_tol(openmc::FP_COINCIDENT);
-      _point_locators.back()->enable_out_of_mesh_mode();
+      if (!openmc::settings::delta_tracking)
+        paramError("delta_pointwise_densities",
+                  "Pointwise densities can only be used when running delta tracking!");
+
+      openmc::settings::delta_density_pointwise_callback =
+        [&](const double & x, const double & y, const double & z, double & density)
+      {
+        // Find the element associated with a point. A set of density blocks is
+        // passed into the point locator to restrict the search to blocks with
+        // density feedback.
+        const auto & point_locator = _point_locators.at(openmc::thread_num());
+        const auto elem_ptr = (*point_locator)(libMesh::Point(x, y, z), &_density_blocks_set);
+
+        // Point with feedback doesn't exist in the mesh. Set density to 0 and return false.
+        if (!elem_ptr)
+        {
+          density = 0.0;
+          return false;
+        }
+
+        // Point with density feedback exists. Set the density and return true.
+        // TODO: Handle basis functions, this assumes constant monomial.
+        auto var = _subdomain_to_density_vars.at(elem_ptr->subdomain_id()).first;
+        auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
+        // Convert to g/cm3 from kg/m3
+        density = _serialized_solution(dof_idx) * OpenMCProblemBase::densityConversionFactor();
+        return true;
+      };
+      openmc::settings::delta_use_pointwise_density = true;
     }
   }
 }
@@ -2548,9 +2564,20 @@ OpenMCCellAverageProblem::externalSolve()
     }
   }
 
-  // Serialize the auxsystem for pointwise feedback.
   if (_delta_pointwise_temps || _delta_pointwise_densities)
+  {
+    // Serialize the auxsystem for pointwise feedback.
     _aux->serializeSolution();
+
+    // Cache point locators to avoid building them again.
+    _point_locators.clear();
+    for (int i = 0; i < libMesh::n_threads(); i++)
+    {
+      _point_locators.emplace_back(mesh().getMesh().sub_point_locator());
+      _point_locators.back()->set_contains_point_tol(openmc::FP_COINCIDENT);
+      _point_locators.back()->enable_out_of_mesh_mode();
+    }
+  }
 
   OpenMCProblemBase::externalSolve();
 
