@@ -946,11 +946,17 @@ protected:
   /// Whether pointwise temperatures should be used with delta tracking or not.
   const bool _delta_pointwise_temps;
 
+  /// Whether pointwise densities should be used with delta tracking or not.
+  const bool _delta_pointwise_densities;
+
   /// Cached sub point locators for pointwise temperatures in delta tracking.
   std::vector<std::unique_ptr<libMesh::PointLocatorBase>> _point_locators;
 
   /// A set of temperature feedback blocks. Cached to speed up point location.
   std::set<SubdomainID> _temperature_blocks_set;
+
+  /// A set of density feedback blocks. Cached to speed up point location.
+  std::set<SubdomainID> _density_blocks_set;
 
   /// Whether any spatial mapping from OpenMC's cells to the mesh is needed
   bool _needs_to_map_cells;

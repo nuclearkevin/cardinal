@@ -122,6 +122,10 @@ OpenMCCellAverageProblem::validParams()
       "delta_pointwise_temps",
       false,
       "Whether pointwise temperatures should be used if running with delta tracking.");
+  params.addParam<bool>(
+      "delta_pointwise_densities",
+      false,
+      "Whether pointwise densities should be used if running with delta tracking.");
 
   params.addParam<std::vector<std::vector<std::string>>>(
       "density_variables",
@@ -212,6 +216,7 @@ OpenMCCellAverageProblem::OpenMCCellAverageProblem(const InputParameters & param
     _specified_density_feedback(params.isParamSetByUser("density_blocks")),
     _specified_temperature_feedback(params.isParamSetByUser("temperature_blocks")),
     _delta_pointwise_temps(getParam<bool>("delta_pointwise_temps")),
+    _delta_pointwise_densities(getParam<bool>("delta_pointwise_densities")),
     _needs_to_map_cells(_specified_density_feedback || _specified_temperature_feedback),
     _volume_calc(nullptr),
     _symmetry(nullptr),
@@ -411,6 +416,7 @@ OpenMCCellAverageProblem::OpenMCCellAverageProblem(const InputParameters & param
   readBlockVariables("temperature", "temp", _temp_vars_to_blocks, _temp_blocks);
   _temperature_blocks_set = std::set<SubdomainID>(_temp_blocks.begin(), _temp_blocks.end());
   readBlockVariables("density", "density", _density_vars_to_blocks, _density_blocks);
+  _density_blocks_set = std::set<SubdomainID>(_density_blocks.begin(), _density_blocks.end());
 
   // When running in multi-group mode, the user needs to provide a reference density if density
   // feedback is specified (to convert to the dimensionless MGXS density). In the future, it would
@@ -734,48 +740,134 @@ OpenMCCellAverageProblem::initialSetup()
   }
 #endif
 
-  if (_delta_pointwise_temps)
+  const bool valid_pw_temp = _delta_pointwise_temps && _specified_temperature_feedback;
+  const bool valid_pw_density = _delta_pointwise_densities && _specified_density_feedback;
+  const bool use_combined = valid_pw_temp && valid_pw_density;
+  // We can use the combined callback.
+  if (use_combined)
+  {
+    if (!openmc::settings::delta_tracking)
+      mooseError("Pointwise temperature/density feedback can only be used when running delta tracking!");
+
+    openmc::settings::delta_pointwise_callback =
+      [&](const double & x, const double & y, const double & z,
+          bool & found_temp, double & temperature, bool & found_density, double & density)
+    {
+      // Find the element associated with a point.
+      const auto & point_locator = _point_locators.at(openmc::thread_num());
+      const auto elem_ptr = (*point_locator)(libMesh::Point(x, y, z));
+
+      // Element doesn't exist, exit early.
+      if (!elem_ptr)
+      {
+        found_temp = false;
+        found_density = false;
+        temperature = 0.0;
+        density = 0.0;
+        return;
+      }
+
+      // Check for temperature feedback.
+      if (_temperature_blocks_set.count(elem_ptr->subdomain_id()))
+      {
+        // Point with temperature feedback exists. Set the temperature and found flag.
+        // TODO: Handle basis functions, this assumes constant monomial.
+        auto var = _subdomain_to_temp_vars.at(elem_ptr->subdomain_id()).first;
+        auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
+        temperature = _serialized_solution(dof_idx);
+
+        found_temp = true;
+      }
+
+      // Check for density feedback.
+      if (_density_blocks_set.count(elem_ptr->subdomain_id()))
+      {
+        // Point with density feedback exists. Set the density and found flag.
+        // TODO: Handle basis functions, this assumes constant monomial.
+        auto var = _subdomain_to_density_vars.at(elem_ptr->subdomain_id()).first;
+        auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
+        // Convert to g/cm3 from kg/m3
+        density = _serialized_solution(dof_idx) / 1000.0;
+
+        found_density = true;
+      }
+    };
+    openmc::settings::delta_use_pointwise_feedback = true;
+  }
+
+  if (valid_pw_temp && !use_combined)
   {
     if (!openmc::settings::delta_tracking)
       paramError("delta_pointwise_temps",
                  "Pointwise temperatures can only be used when running delta tracking!");
 
-    if (!_specified_temperature_feedback)
-      mooseWarning("Not running with delta tracking! 'delta_pointwise_temps' is unused.");
-    else
+    openmc::settings::delta_temp_pointwise_callback =
+      [&](const double & x, const double & y, const double & z, double & temperature)
     {
-      openmc::settings::delta_use_pointwise_temp = true;
-      openmc::settings::delta_pointwise_callback =
-        [&](const double & x, const double & y, const double & z, double & temperature)
+      // Find the element associated with a point. A set of temperature blocks is
+      // passed into the point locator to restrict the search to blocks with
+      // temperature feedback.
+      const auto & point_locator = _point_locators.at(openmc::thread_num());
+      const auto elem_ptr = (*point_locator)(libMesh::Point(x, y, z), &_temperature_blocks_set);
+
+      // Point with feedback doesn't exist in the mesh. Set temperature to 0 and return false.
+      if (!elem_ptr)
       {
-        // Find the element associated with a point. A set of temperature blocks is
-        // passed into the point locator to restrict the search to blocks with
-        // temperature feedback.
-        const auto & point_locator = _point_locators.at(openmc::thread_num());
-        const auto elem_ptr = (*point_locator)(libMesh::Point(x, y, z), &_temperature_blocks_set);
-
-        // Point with feedback doesn't exist in the mesh. Set temperature to 0 and return false.
-        if (!elem_ptr)
-        {
-          temperature = 0.0;
-          return false;
-        }
-
-        // Point with temperature feedback exists. Set the temperature and return true.
-        // TODO: Handle basis functions, this assumes constant monomial.
-        auto var = _subdomain_to_temp_vars.at(elem_ptr->subdomain_id()).first;
-        auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
-        temperature = _serialized_solution(dof_idx);
-        return true;
-      };
-
-      // Cache point locators to avoid building them again.
-      for (int i = 0; i < libMesh::n_threads(); i++)
-      {
-        _point_locators.emplace_back(mesh().getMesh().sub_point_locator());
-        _point_locators.back()->set_contains_point_tol(openmc::FP_COINCIDENT);
-        _point_locators.back()->enable_out_of_mesh_mode();
+        temperature = 0.0;
+        return false;
       }
+
+      // Point with temperature feedback exists. Set the temperature and return true.
+      // TODO: Handle basis functions, this assumes constant monomial.
+      auto var = _subdomain_to_temp_vars.at(elem_ptr->subdomain_id()).first;
+      auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
+      temperature = _serialized_solution(dof_idx);
+      return true;
+    };
+    openmc::settings::delta_use_pointwise_temp = true;
+  }
+
+  if (valid_pw_density && !use_combined)
+  {
+    if (!openmc::settings::delta_tracking)
+      paramError("delta_pointwise_densities",
+                 "Pointwise densities can only be used when running delta tracking!");
+
+    openmc::settings::delta_density_pointwise_callback =
+      [&](const double & x, const double & y, const double & z, double & density)
+    {
+      // Find the element associated with a point. A set of density blocks is
+      // passed into the point locator to restrict the search to blocks with
+      // density feedback.
+      const auto & point_locator = _point_locators.at(openmc::thread_num());
+      const auto elem_ptr = (*point_locator)(libMesh::Point(x, y, z), &_density_blocks_set);
+
+      // Point with feedback doesn't exist in the mesh. Set density to 0 and return false.
+      if (!elem_ptr)
+      {
+        density = 0.0;
+        return false;
+      }
+
+      // Point with density feedback exists. Set the density and return true.
+      // TODO: Handle basis functions, this assumes constant monomial.
+      auto var = _subdomain_to_density_vars.at(elem_ptr->subdomain_id()).first;
+      auto dof_idx = elem_ptr->dof_number(_aux->number(), var, 0);
+      // Convert to g/cm3 from kg/m3
+      density = _serialized_solution(dof_idx) / 1000.0;
+      return true;
+    };
+    openmc::settings::delta_use_pointwise_density = true;
+  }
+
+  // Cache point locators to avoid building them again.
+  if (valid_pw_temp || valid_pw_density)
+  {
+    for (int i = 0; i < libMesh::n_threads(); i++)
+    {
+      _point_locators.emplace_back(mesh().getMesh().sub_point_locator());
+      _point_locators.back()->set_contains_point_tol(openmc::FP_COINCIDENT);
+      _point_locators.back()->enable_out_of_mesh_mode();
     }
   }
 }
