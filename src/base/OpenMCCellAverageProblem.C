@@ -2548,14 +2548,14 @@ OpenMCCellAverageProblem::externalSolve()
     }
   }
 
-  // Serialize the auxsystem for pointwise temperatures.
-  if (_delta_pointwise_temps)
+  // Serialize the auxsystem for pointwise feedback.
+  if (_delta_pointwise_temps || _delta_pointwise_densities)
     _aux->serializeSolution();
 
   OpenMCProblemBase::externalSolve();
 
   // Undo serialization.
-  if (_delta_pointwise_temps)
+  if (_delta_pointwise_temps || _delta_pointwise_densities)
   {
     _aux->solution().close();
     _aux->system().update();
