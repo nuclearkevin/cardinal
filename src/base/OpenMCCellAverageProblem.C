@@ -745,12 +745,13 @@ OpenMCCellAverageProblem::initialSetup()
   const bool valid_pw_temp = _delta_pointwise_temps && _specified_temperature_feedback;
   const bool valid_pw_density = _delta_pointwise_densities && _specified_density_feedback;
   const bool use_combined = valid_pw_temp && valid_pw_density;
+
+  if ((valid_pw_temp || valid_pw_density) && !openmc::settings::delta_trackingy)
+    mooseError("Pointwise temperature/density feedback can only be used when running delta tracking!");
+
   // We can use the combined callback to reduce the number of point locator calls.
   if (use_combined)
   {
-    if (!openmc::settings::delta_tracking)
-      mooseError("Pointwise temperature/density feedback can only be used when running delta tracking!");
-
     openmc::settings::delta_pointwise_callback =
       [&](const double & x, const double & y, const double & z,
           bool & found_temp, double & temperature, bool & found_density, double & density)
@@ -799,10 +800,6 @@ OpenMCCellAverageProblem::initialSetup()
 
   if (valid_pw_temp && !use_combined)
   {
-    if (!openmc::settings::delta_tracking)
-      paramError("delta_pointwise_temps",
-                 "Pointwise temperatures can only be used when running delta tracking!");
-
     openmc::settings::delta_temp_pointwise_callback =
       [&](const double & x, const double & y, const double & z, double & temperature)
     {
@@ -855,10 +852,6 @@ OpenMCCellAverageProblem::initialSetup()
 
     if (!use_combined)
     {
-      if (!openmc::settings::delta_tracking)
-        paramError("delta_pointwise_densities",
-                  "Pointwise densities can only be used when running delta tracking!");
-
       openmc::settings::delta_density_pointwise_callback =
         [&](const double & x, const double & y, const double & z, double & density)
       {
