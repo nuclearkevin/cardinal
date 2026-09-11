@@ -414,11 +414,6 @@ MeshTally::relaxAndNormalizeTally(bool is_relaxation_allowed)
   if (!is_relaxation_allowed)
     alpha = 1.0;
 
-  if (_openmc_problem.getMooseMesh().getMesh().allow_renumbering())
-  {
-    _console << "Mesh is allowing renumbering!!!" << std::endl;
-  }
-
   for (unsigned int score = 0; score < _tally_score.size(); ++score)
   {
     // Extract raw results.
