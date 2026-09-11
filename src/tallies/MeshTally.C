@@ -208,88 +208,6 @@ MeshTally::gatherLinkedSum()
   }
 }
 
-void
-MeshTally::relaxAndNormalizeTally(bool is_relaxation_allowed)
-{
-  // Only need to project solution vectors for relaxation when
-  // adaptivity is used.
-  if (!_is_adaptive)
-  {
-    TallyBase::relaxAndNormalizeTally(is_relaxation_allowed);
-    return;
-  }
-
-  Real alpha;
-  switch (_relaxation_type)
-  {
-    case relaxation::none:
-    {
-      alpha = 1.0;
-      break;
-    }
-    case relaxation::constant:
-    {
-      alpha = _relaxation_factor;
-      break;
-    }
-    case relaxation::robbins_monro:
-    {
-      alpha = 1.0 / (_openmc_problem.fixedPointIteration() + 1);
-      break;
-    }
-    case relaxation::dufek_gudowski:
-    {
-      alpha = static_cast<float>(_openmc_problem.nParticles()) /
-              static_cast<float>(_openmc_problem.nTotalParticles());
-      break;
-    }
-    default:
-      mooseError("Unhandled RelaxationEnum in TallyBase!");
-  }
-
-  for (unsigned int score = 0; score < _tally_score.size(); ++score)
-  {
-    if (_check_tally_sum && _needs_global_tally)
-      checkTallySum(score);
-
-    const Real norm = tallyNormalization(score);
-
-    auto & current = _current_tally[score];
-    auto & previous = _previous_tally[score];
-    auto & current_raw = _current_raw_tally[score];
-    auto & current_raw_rel_error = _current_raw_tally_rel_error[score];
-    auto & current_raw_std_dev = _current_raw_tally_std_dev[score];
-
-    auto mean_tally = _openmc_problem.tallySum(_local_tally, score);
-    /**
-     * If the value over the whole domain is zero, then the values in the individual bins must be
-     * zero. We need to avoid divide-by-zeros.
-     */
-    current_raw = mean_tally;
-    current_raw *= std::abs(norm) < ZERO_TALLY_THRESHOLD ? 0.0 : (1.0 / norm);
-
-    auto sum_sq = OMCTensor(_local_tally->results_.slice(
-        openmc::tensor::all, score, static_cast<int>(openmc::TallyResult::SUM_SQ)));
-    current_raw_rel_error =
-        _openmc_problem.relativeError(mean_tally, sum_sq, _local_tally->n_realizations_);
-    current_raw_std_dev = current_raw_rel_error * current_raw;
-
-
-    if (_openmc_problem.fixedPointIteration() == 0 || alpha == 1.0)
-    {
-      current = current_raw;
-      previous = current_raw;
-      continue;
-    }
-
-    projectAndRelaxAMR(alpha, previous, current_raw, current);
-  }
-
-  // Need to save the old mapping data structures.
-  _prev_bin_to_element_mapping = _bin_to_element_mapping;
-  _prev_elem_to_bin_mapping = _element_to_bin_mapping;
-}
-
 Real
 MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
                              unsigned int local_score,
@@ -404,7 +322,7 @@ MeshTally::relaxAndNormalizeTally(bool is_relaxation_allowed)
   // adaptivity is used.
   if (!_is_adaptive)
   {
-    TallyBase::relaxAndNormalizeTally();
+    TallyBase::relaxAndNormalizeTally(is_relaxation_allowed);
     return;
   }
 
