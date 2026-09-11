@@ -599,6 +599,7 @@ TallyBase::renormalizeLinkedTallies()
   }
 }
 
+void
 TallyBase::extractAndNormalizeRaw(unsigned int score)
 {
   const Real norm = tallyNormalization(score);
