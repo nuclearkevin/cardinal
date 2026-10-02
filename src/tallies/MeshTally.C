@@ -22,15 +22,6 @@
 
 #include "libmesh/replicated_mesh.h"
 
-#ifdef ENABLE_XDG
-#include "openmc/xdg.h"
-
-// For cell-under-voxel subdivision.
-#include "openmc/random_ray/flat_source_domain.h"
-#include "openmc/geometry.h"
-#include "openmc/universe.h"
-#endif
-
 registerMooseObject("CardinalApp", MeshTally);
 
 InputParameters
@@ -46,11 +37,6 @@ MeshTally::validParams()
   params.addParam<Point>("mesh_translation",
                          "Coordinate to which this mesh should be "
                          "translated. Units must match those used to define the [Mesh].");
-#ifdef ENABLE_XDG
-  params.addParam<bool>("use_xdg",
-                        false,
-                        "Whether this mesh tally should ue XDG or not.");
-#endif
 
   // The index of this tally into an array of mesh translations. Defaults to zero.
   params.addPrivateParam<unsigned int>("instance", 0);
@@ -64,9 +50,6 @@ MeshTally::MeshTally(const InputParameters & parameters)
                                                        : Point(0.0, 0.0, 0.0)),
     _instance(getParam<unsigned int>("instance")),
     _use_dof_map(_is_adaptive || isParamValid("block"))
-#ifdef ENABLE_XDG
-    , _use_xdg(getParam<bool>("use_xdg"))
-#endif
 {
   bool nu_scatter =
       std::find(_tally_score.begin(), _tally_score.end(), "nu-scatter") != _tally_score.end();
@@ -74,24 +57,12 @@ MeshTally::MeshTally(const InputParameters & parameters)
   // Error check the estimators.
   if (isParamValid("estimator"))
   {
-#ifdef ENABLE_XDG
-    if (_estimator == openmc::TallyEstimator::TRACKLENGTH && !_use_xdg)
-      paramError("estimator",
-                 "Tracklength estimators are currently incompatible with non-XDG mesh tallies!");
-#else
     if (_estimator == openmc::TallyEstimator::TRACKLENGTH)
       paramError("estimator",
-                 "Tracklength estimators are currently incompatible with mesh tallies!");
-#endif
+                 "Tracklength estimators are currently incompatible with libMesh unstructured mesh tallies!");
   }
   else
-  {
-#ifdef ENABLE_XDG
-    _estimator = nu_scatter ? openmc::TallyEstimator::ANALOG : (_use_xdg ? openmc::TallyEstimator::TRACKLENGTH : openmc::TallyEstimator::COLLISION);
-#else
     _estimator = nu_scatter ? openmc::TallyEstimator::ANALOG : openmc::TallyEstimator::COLLISION;
-#endif
-  }
 
   // Error check the mesh template.
   if (_openmc_problem.getMooseMesh().getMesh().allow_renumbering())
@@ -133,40 +104,6 @@ MeshTally::MeshTally(const InputParameters & parameters)
                  "provided in the [Mesh] block!");
   }
 
-  // Error check parameters for XDG tallies.
-#ifdef ENABLE_XDG
-  if (_use_xdg)
-  {
-    if (isParamSetByUser("block"))
-      paramError("block", "Cannot use subdomain restriction when using XDG mesh tallies!");
-
-    if (_openmc_problem.scaling() != 1.0)
-      mooseError("XDG mesh tallies cannot be scaled!");
-
-    // Gather all element types in the mesh.
-    std::set<ElemType> contained_elem;
-    auto begin = _openmc_problem.getMooseMesh().activeLocalElementsBegin();
-    auto end = _openmc_problem.getMooseMesh().activeLocalElementsEnd();
-    for (const auto & elem : libMesh::as_range(begin, end))
-      contained_elem.insert(elem->type());
-
-    // Check to make sure the mesh only contains a single element type.
-    if (contained_elem.size() > 1)
-      paramError("use_xdg",
-                 "XDG mesh tallies only support single-element meshes! Either "
-                 "ensure your mesh uses a single element type, or set "
-                 "'use_xdg = false'.");
-
-    // Check to make sure all elements are TET4s or HEX8s.
-    for (auto elem_type : contained_elem)
-      if (elem_type != ElemType::TET4 && elem_type != ElemType::HEX8)
-        paramError("use_xdg",
-                   "XDG mesh tallies only support TET4 and HEX8 elements! Either "
-                   "ensure your mesh only uses either TET4 or HEX8 elements, or set "
-                   "'use_xdg = false'.");
-  }
-#endif
-
   /**
    * If the instance isn't zero this variable is a translated mesh tally. It will accumulate it's
    * scores in a different set of variables (the auxvars which are added by the first tally in a
@@ -175,24 +112,10 @@ MeshTally::MeshTally(const InputParameters & parameters)
   if (_instance != 0)
     _tally_name = std::vector<std::string>();
 
-  // The random ray solver requires tracklength estimators, which non-XDG unstructured meshes
+  // The random ray solver requires tracklength estimators, which libMesh unstructured meshes
   // don't support.
-#ifdef ENABLE_XDG
-  if (_openmc_problem.runRandomRay())
-  {
-    if (!_use_xdg)
-      mooseError("Non-XDG unstructured mesh tallies are not supported when using the random ray solver!");
-
-    // We need to silently override the tally estimator to collision due to a bug
-    // in OpenMC's random ray solver. This only changes how tallies are mapped to
-    // source regions (which uses the Monte Carlo tallying infrastructure).
-    // Tallied quantities still use tracklengths as TRRM is based on MOC.
-    _estimator = openmc::TallyEstimator::COLLISION;
-  }
-#else
   if (_openmc_problem.runRandomRay())
     mooseError("Unstructured mesh tallies are not supported when using the random ray solver!");
-#endif
 }
 
 std::pair<unsigned int, openmc::Filter *>
@@ -239,43 +162,13 @@ MeshTally::spatialFilter()
       }
     }
 
-#ifdef ENABLE_XDG
-    if (_use_xdg)
-    {
-      _xdg_mesh_manager.reset(new xdg::LibMeshManager(msh));
-      _xdg_mesh_manager->init();
-      _xdg_mesh_manager->parse_metadata();
-
-      _xdg_instance.reset(new xdg::XDG(_xdg_mesh_manager, xdg::RTLibrary::EMBREE));
-      openmc::model::meshes.emplace_back(std::make_unique<openmc::XDGMesh>(_xdg_instance));
-    }
-    else
-    {
-      openmc::model::meshes.emplace_back(std::make_unique<openmc::AdaptiveLibMesh>(
-        _openmc_problem.getMooseMesh().getMesh(), _openmc_problem.scaling(), _tally_blocks));
-    }
-#else
     openmc::model::meshes.emplace_back(std::make_unique<openmc::AdaptiveLibMesh>(
         _openmc_problem.getMooseMesh().getMesh(), _openmc_problem.scaling(), _tally_blocks));
-#endif
   }
   else
   {
-#ifdef ENABLE_XDG
-    if (_use_xdg)
-    {
-      openmc::model::meshes.emplace_back(
-        std::make_unique<openmc::XDGMesh>(*_mesh_template_filename, _openmc_problem.scaling()));
-    }
-    else
-    {
-      openmc::model::meshes.emplace_back(
-        std::make_unique<openmc::LibMesh>(*_mesh_template_filename, _openmc_problem.scaling()));
-    }
-#else
     openmc::model::meshes.emplace_back(
       std::make_unique<openmc::LibMesh>(*_mesh_template_filename, _openmc_problem.scaling()));
-#endif
   }
 
   _mesh_index = openmc::model::meshes.size() - 1;
@@ -285,16 +178,6 @@ MeshTally::spatialFilter()
   // by setting the ID to -1, OpenMC will automatically detect the next available ID
   _mesh_template->set_id(-1);
   _mesh_template->output_ = false;
-
-#ifdef ENABLE_XDG
-  // Use the mesh for cell-under-voxel subdivision if running the random ray solver
-  if (_openmc_problem.runRandomRay() && _use_xdg)
-  {
-    auto root_uni_id = openmc::model::universes[openmc::model::root_universe]->id_;
-    openmc::FlatSourceDomain::mesh_domain_map_[_mesh_template->id()].emplace_back(
-      openmc::Source::DomainType::UNIVERSE, root_uni_id);
-  }
-#endif
 
   _mesh_filter = dynamic_cast<openmc::MeshFilter *>(openmc::Filter::create("mesh"));
   _mesh_filter->set_mesh(_mesh_index);
@@ -312,10 +195,6 @@ MeshTally::resetTally()
   TallyBase::resetTally();
 
   // Erase the OpenMC mesh.
-#ifdef ENABLE_XDG
-  if (_openmc_problem.runRandomRay() && _use_xdg)
-    openmc::FlatSourceDomain::mesh_domain_map_.erase(_mesh_template->id());
-#endif
   openmc::model::meshes.erase(openmc::model::meshes.begin() + _mesh_index);
 }
 

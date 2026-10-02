@@ -28,11 +28,6 @@
 #include "xdg/mesh_managers.h"
 #endif
 
-namespace libMesh
-{
-class ReplicatedMesh;
-}
-
 class MeshTally : public TallyBase
 {
 public:
