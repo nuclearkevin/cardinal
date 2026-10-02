@@ -16,19 +16,15 @@
 /*                 See LICENSE for full restrictions                */
 /********************************************************************/
 
-#ifdef ENABLE_OPENMC_COUPLING
-#include "MeshTally.h"
-#include "DisplacedProblem.h"
+#ifdef ENABLE_XDG
 
-#include "libmesh/replicated_mesh.h"
-
-registerMooseObject("CardinalApp", MeshTally);
+registerMooseObject("CardinalApp", XDGMeshTally);
 
 InputParameters
-MeshTally::validParams()
+XDGMeshTally::validParams()
 {
   auto params = TallyBase::validParams();
-  params.addClassDescription("A class which implements unstructured mesh tallies.");
+  params.addClassDescription("A class which implements unstructured mesh tallies using the XDG mesh backend.");
   params.addParam<std::string>("mesh_template",
                                "Mesh tally template for OpenMC when using mesh tallies; "
                                "at present, this mesh must exactly match the mesh used in the "
@@ -44,7 +40,7 @@ MeshTally::validParams()
   return params;
 }
 
-MeshTally::MeshTally(const InputParameters & parameters)
+XDGMeshTally::XDGMeshTally(const InputParameters & parameters)
   : TallyBase(parameters),
     _mesh_translation(isParamValid("mesh_translation") ? getParam<Point>("mesh_translation")
                                                        : Point(0.0, 0.0, 0.0)),
@@ -55,19 +51,13 @@ MeshTally::MeshTally(const InputParameters & parameters)
       std::find(_tally_score.begin(), _tally_score.end(), "nu-scatter") != _tally_score.end();
 
   // Error check the estimators.
-  if (isParamValid("estimator"))
-  {
-    if (_estimator == openmc::TallyEstimator::TRACKLENGTH)
-      paramError("estimator",
-                 "Tracklength estimators are currently incompatible with libMesh unstructured mesh tallies!");
-  }
-  else
-    _estimator = nu_scatter ? openmc::TallyEstimator::ANALOG : openmc::TallyEstimator::COLLISION;
+  _estimator = nu_scatter ? openmc::TallyEstimator::ANALOG : openmc::TallyEstimator::TRACKLENGTH;
 
   // Error check the mesh template.
-  if (_openmc_problem.getMooseMesh().getMesh().allow_renumbering())
+  if (_openmc_problem.getMooseMesh().getMesh().allow_renumbering() &&
+      !_openmc_problem.getMooseMesh().getMesh().is_replicated())
     mooseError(
-        "Mesh tallies currently require 'allow_renumbering = false' to be set in the [Mesh]!");
+        "'XDGMeshTally' currently requires 'allow_renumbering = false' to be set in the [Mesh]!");
 
   if (isParamValid("mesh_template"))
   {
@@ -104,6 +94,27 @@ MeshTally::MeshTally(const InputParameters & parameters)
                  "provided in the [Mesh] block!");
   }
 
+  if (isParamSetByUser("block"))
+    paramError("block", "Cannot use subdomain restriction when using XDG mesh tallies!");
+
+  // Gather all element types in the mesh.
+  std::set<ElemType> contained_elem;
+  auto begin = _openmc_problem.getMooseMesh().activeLocalElementsBegin();
+  auto end = _openmc_problem.getMooseMesh().activeLocalElementsEnd();
+  for (const auto & elem : libMesh::as_range(begin, end))
+    contained_elem.insert(elem->type());
+
+  // Check to make sure the mesh only contains a single element type.
+  if (contained_elem.size() > 1)
+    mooseError("XDG mesh tallies only support single-element meshes! Please "
+               "ensure your mesh uses a single element type, or use a 'MeshTally' instead.");
+
+  // Check to make sure all elements are TET4s or HEX8s.
+  for (auto elem_type : contained_elem)
+    if (elem_type != ElemType::TET4 && elem_type != ElemType::HEX8)
+      mooseError("XDG mesh tallies only support TET4 and HEX8 elements! Either "
+                 "ensure your mesh only uses either TET4 or HEX8 elements, or use a 'MeshTally' instead.");
+
   /**
    * If the instance isn't zero this variable is a translated mesh tally. It will accumulate it's
    * scores in a different set of variables (the auxvars which are added by the first tally in a
@@ -111,15 +122,10 @@ MeshTally::MeshTally(const InputParameters & parameters)
    */
   if (_instance != 0)
     _tally_name = std::vector<std::string>();
-
-  // The random ray solver requires tracklength estimators, which libMesh unstructured meshes
-  // don't support.
-  if (_openmc_problem.runRandomRay())
-    mooseError("Unstructured mesh tallies are not supported when using the random ray solver!");
 }
 
 std::pair<unsigned int, openmc::Filter *>
-MeshTally::spatialFilter()
+XDGMeshTally::spatialFilter()
 {
   // Create the OpenMC mesh which will be tallied on.
   if (!_mesh_template_filename)
@@ -140,35 +146,23 @@ MeshTally::spatialFilter()
                        : msh->active_elements_begin();
       auto end = _tally_blocks.size() > 0 ? msh->active_subdomain_set_elements_end(_tally_blocks)
                                           : msh->active_elements_end();
-
-      unsigned int max_elem_id = 0;
       for (const auto & old_elem : libMesh::as_range(begin, end))
-      {
-        max_elem_id = std::max(max_elem_id, static_cast<unsigned int>(old_elem->id()));
         _bin_to_element_mapping.push_back(old_elem->id());
-      }
+
       _bin_to_element_mapping.shrink_to_fit();
-
-      // The dual mapping is only required when applying relaxation with adaptive
-      // mesh tallies.
-      if (_is_adaptive && _relaxation_type != relaxation::none)
-      {
-        _element_to_bin_mapping.clear();
-        _element_to_bin_mapping.resize(max_elem_id + 1, INVALID_TALLY_BIN);
-        for (size_t i = 0; i < _bin_to_element_mapping.size(); ++i)
-          _element_to_bin_mapping[_bin_to_element_mapping[i]] = i;
-
-        _element_to_bin_mapping.shrink_to_fit();
-      }
     }
 
-    openmc::model::meshes.emplace_back(std::make_unique<openmc::AdaptiveLibMesh>(
-        _openmc_problem.getMooseMesh().getMesh(), _openmc_problem.scaling(), _tally_blocks));
+    _xdg_mesh_manager.reset(new xdg::LibMeshManager(msh));
+    _xdg_mesh_manager->init();
+    _xdg_mesh_manager->parse_metadata();
+
+    _xdg_instance.reset(new xdg::XDG(_xdg_mesh_manager, xdg::RTLibrary::EMBREE));
+    openmc::model::meshes.emplace_back(std::make_unique<openmc::XDGMesh>(_xdg_instance, _openmc_problem.scaling()));
   }
   else
   {
     openmc::model::meshes.emplace_back(
-      std::make_unique<openmc::LibMesh>(*_mesh_template_filename, _openmc_problem.scaling()));
+        std::make_unique<openmc::XDGMesh>(*_mesh_template_filename, _openmc_problem.scaling()));
   }
 
   _mesh_index = openmc::model::meshes.size() - 1;
@@ -190,7 +184,7 @@ MeshTally::spatialFilter()
 }
 
 void
-MeshTally::resetTally()
+XDGMeshTally::resetTally()
 {
   TallyBase::resetTally();
 
@@ -199,7 +193,7 @@ MeshTally::resetTally()
 }
 
 void
-MeshTally::gatherLinkedSum()
+XDGMeshTally::gatherLinkedSum()
 {
   if (_linked_tallies.size() == 0)
     return;
@@ -217,7 +211,7 @@ MeshTally::gatherLinkedSum()
 }
 
 Real
-MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
+XDGMeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
                              unsigned int local_score,
                              const std::vector<OMCTensor> & tally_vals,
                              bool norm_by_src_rate)
@@ -254,7 +248,7 @@ MeshTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
 }
 
 void
-MeshTally::checkMeshTemplateAndTranslations()
+XDGMeshTally::checkMeshTemplateAndTranslations()
 {
   // we can do some rudimentary checking on the mesh template by comparing the centroid
   // coordinates compared to centroids in the [Mesh] (because right now, we just doing a simple
@@ -323,212 +317,4 @@ MeshTally::checkMeshTemplateAndTranslations()
   }
 }
 
-void
-MeshTally::relaxAndNormalizeTally(bool is_relaxation_allowed)
-{
-  // Set alpha to unity if OpenMCCellAverageProblem is disabling relaxation
-  // (e.g. due to controls)
-  const auto alpha = is_relaxation_allowed ? getRelaxationFactor() : 1.0;
-
-  // Only need to project solution vectors for relaxation when
-  // adaptivity is used and we're not on the first iteration / using relaxation.
-  if (!_is_adaptive || _openmc_problem.fixedPointIteration() == 0 || alpha == 1.0)
-    TallyBase::relaxAndNormalizeTally(is_relaxation_allowed);
-  else
-  {
-    for (unsigned int score = 0; score < _tally_score.size(); ++score)
-    {
-      // Extract raw results.
-      extractAndNormalizeRaw(score);
-
-      // Save the current tally (from the previous iteration) into the previous one.
-      _previous_tally[score] = _current_tally[score];
-
-      // Apply relaxation to the AMR mesh tally.
-      projectAndRelaxAMR(
-          alpha, _previous_tally[score], _current_raw_tally[score], _current_tally[score]);
-    }
-  }
-
-  // Need to save the old mapping data structures.
-  _prev_bin_to_element_mapping.clear();
-  std::copy(_bin_to_element_mapping.begin(),
-            _bin_to_element_mapping.end(),
-            std::back_inserter(_prev_bin_to_element_mapping));
-  _prev_elem_to_bin_mapping.clear();
-  std::copy(_element_to_bin_mapping.begin(),
-            _element_to_bin_mapping.end(),
-            std::back_inserter(_prev_elem_to_bin_mapping));
-}
-
-MeshTally::AMRRelaxation
-MeshTally::classifyRelaxationCase(const libMesh::Elem * current_element) const
-{
-  // Check for Case I.
-  if (previousSpatialBin(current_element) != INVALID_TALLY_BIN)
-    return AMRRelaxation::Unchanged;
-
-  // Check for Case II.
-  if (previousActiveAncestor(current_element))
-    return AMRRelaxation::CoarseToFine;
-
-  // Check for Case III.
-  std::vector<const Elem *> descendants;
-  current_element->total_family_tree(descendants, true);
-  for (const auto descendant : descendants)
-    if (previousSpatialBin(descendant) != INVALID_TALLY_BIN)
-      return AMRRelaxation::FineToCoarse;
-
-  mooseError("Internal error: MeshTally::classifyRelaxationCase failed to classify an element.");
-  return AMRRelaxation::Unchanged;
-}
-
-void
-MeshTally::projectAndRelaxAMR(Real alpha,
-                              const OMCTensor & previous,
-                              const OMCTensor & current_raw,
-                              OMCTensor & current_relaxed)
-{
-  // Initialize storage to a zero tensor.
-  current_relaxed = openmc::tensor::zeros<Real>(current_raw.shape());
-
-  for (size_t ext_filter = 0; ext_filter < _num_ext_filter_bins; ++ext_filter)
-  {
-    for (size_t spatial_bin = 0; spatial_bin < _bin_to_element_mapping.size(); ++spatial_bin)
-    {
-      const auto curr_elem =
-          _openmc_problem.getMooseMesh().queryElemPtr(_bin_to_element_mapping[spatial_bin]);
-      const auto current_elem_tally_bin = currentTallyBin(curr_elem, ext_filter);
-
-      switch (classifyRelaxationCase(curr_elem))
-      {
-        case AMRRelaxation::Unchanged:
-        {
-          const auto curr_elem_old_bin = previousTallyBin(curr_elem, ext_filter);
-          current_relaxed(current_elem_tally_bin) = (1.0 - alpha) * previous(curr_elem_old_bin) +
-                                                    alpha * current_raw(current_elem_tally_bin);
-          break;
-        }
-        case AMRRelaxation::CoarseToFine:
-        {
-          const auto prev_active_parent = previousActiveAncestor(curr_elem);
-          const auto prev_par_tally_bin = previousTallyBin(prev_active_parent, ext_filter);
-
-          // Gather the integral over the current element and its siblings. Equivalent to
-          // restricting the current tally result.
-          Real coarsened_proj = 0.0;
-          std::vector<const Elem *> family;
-          prev_active_parent->family_tree(family, true);
-          for (const auto desc : family)
-          {
-            if (!desc->active())
-              continue;
-
-            const auto desc_tally_bin = currentTallyBin(desc, ext_filter);
-            coarsened_proj += current_raw(desc_tally_bin);
-          }
-
-          // Relax said integral.
-          const Real relaxed_coarsened =
-              (1.0 - alpha) * previous(prev_par_tally_bin) + alpha * coarsened_proj;
-
-          // The fraction contributed to the coarsened integral by the current element.
-          const auto current_elem_frac =
-              coarsened_proj == 0.0 ? 0.0 : current_raw(current_elem_tally_bin) / coarsened_proj;
-
-          // Redistribute the result. Equivalent to projecting the relaxed tally.
-          current_relaxed(current_elem_tally_bin) = relaxed_coarsened * current_elem_frac;
-          break;
-        }
-        case AMRRelaxation::FineToCoarse:
-        {
-          // Gather the integral over the previouly active descendants on this element.
-          // Equivalent to restricting the tally result.
-          std::vector<const Elem *> descendants;
-          curr_elem->total_family_tree(descendants, true);
-          Real refined_proj = 0.0;
-          for (const auto descendant : descendants)
-          {
-            const auto desc_old_tally_bin = previousTallyBin(descendant, ext_filter);
-            if (desc_old_tally_bin == INVALID_TALLY_BIN)
-              continue;
-
-            refined_proj += previous(desc_old_tally_bin);
-          }
-
-          // Relax the current (coarser) tally bin in-place.
-          current_relaxed(current_elem_tally_bin) =
-              (1.0 - alpha) * refined_proj + alpha * current_raw(current_elem_tally_bin);
-
-          break;
-        }
-        default:
-        {
-          mooseError(
-              "Internal error: Unhandled AMRRelaxation enum in MeshTally::relaxAndNormalizeTally");
-          break;
-        }
-      }
-    }
-  }
-}
-
-const Elem *
-MeshTally::previousActiveAncestor(const Elem * active_elem) const
-{
-  const Elem * curr_parent = active_elem->parent();
-  while (curr_parent != nullptr)
-  {
-    if (previousSpatialBin(curr_parent) != INVALID_TALLY_BIN)
-      return curr_parent;
-
-    curr_parent = curr_parent->parent();
-  }
-
-  return nullptr;
-}
-
-int64_t
-MeshTally::previousSpatialBin(const Elem * previous_elem) const
-{
-  if (!previous_elem)
-    return INVALID_TALLY_BIN;
-
-  if (previous_elem->id() >= _prev_elem_to_bin_mapping.size())
-    return INVALID_TALLY_BIN;
-
-  return _prev_elem_to_bin_mapping[previous_elem->id()];
-}
-
-int64_t
-MeshTally::previousTallyBin(const Elem * previous_elem, unsigned int ext_filter) const
-{
-  const auto spatial = previousSpatialBin(previous_elem);
-  if (spatial == INVALID_TALLY_BIN)
-    return INVALID_TALLY_BIN;
-  else
-    return _prev_bin_to_element_mapping.size() * ext_filter + spatial;
-}
-
-int64_t
-MeshTally::currentSpatialBin(const Elem * current_elem) const
-{
-  if (!current_elem)
-    return INVALID_TALLY_BIN;
-
-  if (!current_elem->active() || current_elem->id() >= _element_to_bin_mapping.size())
-    return INVALID_TALLY_BIN;
-
-  return _element_to_bin_mapping[current_elem->id()];
-}
-
-int64_t
-MeshTally::currentTallyBin(const Elem * current_elem, unsigned int ext_filter) const
-{
-  const auto spatial = currentSpatialBin(current_elem);
-  if (spatial == INVALID_TALLY_BIN)
-    return INVALID_TALLY_BIN;
-  else
-    return _bin_to_element_mapping.size() * ext_filter + spatial;
-}
 #endif
