@@ -39,10 +39,8 @@ XDGMeshTally::XDGMeshTally(const InputParameters & parameters)
       std::find(_tally_score.begin(), _tally_score.end(), "nu-scatter") != _tally_score.end();
 
   // Error check the estimators.
-  _estimator = nu_scatter ? openmc::TallyEstimator::ANALOG : openmc::TallyEstimator::TRACKLENGTH;
-
-  if (isParamSetByUser("block"))
-    paramError("block", "Cannot use subdomain restriction when using XDG mesh tallies!");
+  if (!isParamValid("estimator"))
+    _estimator = nu_scatter ? openmc::TallyEstimator::ANALOG : openmc::TallyEstimator::TRACKLENGTH;
 
   // Gather all element types in the mesh.
   std::set<ElemType> contained_elem;
@@ -72,8 +70,11 @@ XDGMeshTally::getOpenMCMeshBuildDoFMaps()
     // Build the DoF maps necessary for AMR.
     buildDoFMaps(&_openmc_problem.getMooseMesh().getMesh());
 
+    std::unordered_set<xdg::MeshID> xdg_blocks;
+    xdg_blocks.insert(_tally_blocks.begin(), _tally_blocks.end());
+
     _xdg_mesh_manager.reset(new xdg::LibMeshManager(&_openmc_problem.getMooseMesh().getMesh()));
-    _xdg_mesh_manager->init();
+    _xdg_mesh_manager->init(xdg_blocks);
     _xdg_mesh_manager->parse_metadata();
 
     _xdg_instance.reset(new xdg::XDG(_xdg_mesh_manager, xdg::RTLibrary::EMBREE));
