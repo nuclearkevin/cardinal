@@ -35,12 +35,6 @@ XDGMeshTally::validParams()
 XDGMeshTally::XDGMeshTally(const InputParameters & parameters)
   : MeshTallyBase(parameters)
 {
-  bool nu_scatter =
-      std::find(_tally_score.begin(), _tally_score.end(), "nu-scatter") != _tally_score.end();
-
-  // Error check the estimators.
-  _estimator = nu_scatter ? openmc::TallyEstimator::ANALOG : openmc::TallyEstimator::TRACKLENGTH;
-
   if (isParamSetByUser("block"))
     paramError("block", "Cannot use subdomain restriction when using XDG mesh tallies!");
 
