@@ -71,7 +71,7 @@ XDGMeshTally::getOpenMCMeshBuildDoFMaps()
     _xdg_mesh_manager->parse_metadata();
 
     _xdg_instance.reset(new xdg::XDG(_xdg_mesh_manager, xdg::RTLibrary::EMBREE));
-    openmc::model::meshes.emplace_back(std::make_unique<openmc::XDGMesh>(_xdg_instance));
+    openmc::model::meshes.emplace_back(std::make_unique<openmc::XDGMesh>(_xdg_instance, _openmc_problem.scaling()));
   }
   else
   {
