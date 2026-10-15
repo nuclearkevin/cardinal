@@ -70,7 +70,7 @@ AddTallyAction::act()
 {
   if (_current_task == "add_tallies")
   {
-    if (_type == "MeshTally")
+    if (_type == "MeshTally" || _type == "XDGMeshTally")
     {
       // Add translated mesh tallies.
       for (unsigned int i = 0; i < _mesh_translations.size(); ++i)

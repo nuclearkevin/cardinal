@@ -193,8 +193,7 @@ MeshTallyBase::storeResultsInner(const std::vector<unsigned int> & var_numbers,
                                  const std::vector<OMCTensor> & tally_vals,
                                  bool norm_by_src_rate)
 {
-  const auto mesh_template =
-      dynamic_cast<openmc::UnstructuredMesh *>(openmc::model::meshes[_mesh_index].get());
+  const auto & mesh = _openmc_problem.getMooseMesh();
 
   Real total = 0.0;
 
@@ -203,23 +202,22 @@ MeshTallyBase::storeResultsInner(const std::vector<unsigned int> & var_numbers,
   {
     for (decltype(_mesh_filter->n_bins()) e = 0; e < _mesh_filter->n_bins(); ++e)
     {
+      auto elem_id = _use_dof_map ? _bin_to_element_mapping[e] : mesh_offset + e;
+      Real vol = mesh.queryElemPtr(elem_id)->volume();
+
       Real unnormalized_tally = tally_vals[local_score](ext_bin * _mesh_filter->n_bins() + e);
 
       // divide each tally by the volume that it corresponds to in MOOSE
       // because we will apply it as a volumetric tally (per unit volume).
-      // Because we require that the mesh template has units of cm based on the
-      // mesh constructors in OpenMC, we need to adjust the division
       Real volumetric_tally = unnormalized_tally;
       volumetric_tally *= norm_by_src_rate
                               ? _openmc_problem.tallyMultiplier(_tally_score[local_score],
                                                                 _local_mean_tally[local_score]) /
-                                    mesh_template->volume(e) * _openmc_problem.scaling() *
-                                    _openmc_problem.scaling() * _openmc_problem.scaling()
+                                    vol
                               : 1.0;
       total += _ext_bins_to_skip[ext_bin] ? 0.0 : unnormalized_tally;
 
       auto var = var_numbers[_num_ext_filter_bins * local_score + ext_bin];
-      auto elem_id = _use_dof_map ? _bin_to_element_mapping[e] : mesh_offset + e;
       fillElementalAuxVariable(var, {elem_id}, volumetric_tally);
     }
   }
@@ -269,7 +267,9 @@ MeshTallyBase::checkMeshTemplateAndTranslations()
       bool incorrect_scaling = true;
       for (unsigned int j = 0; j < OpenMCCellAverageProblem::DIMENSION; ++j)
       {
-        Real scaling = centroid_mesh(j) / centroid_template(j);
+        // Need to avoid a divide by zero for the case where an element has a centroid
+        // on the origin.
+        Real scaling = MooseUtils::absoluteFuzzyEqual(centroid_template(j), 0.0) ? 1.0 : centroid_mesh(j) / centroid_template(j);
         incorrect_scaling = incorrect_scaling && !MooseUtils::absoluteFuzzyEqual(scaling, 1.0);
       }
 
