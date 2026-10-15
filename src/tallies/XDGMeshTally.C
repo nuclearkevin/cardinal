@@ -39,7 +39,7 @@ XDGMeshTally::XDGMeshTally(const InputParameters & parameters)
     paramError("block", "Cannot use subdomain restriction when using XDG mesh tallies!");
 
   // Gather all element types in the mesh.
-  std::set<ElemType> contained_elem;
+  std::unordered_set<ElemType> contained_elem;
   auto begin = _openmc_problem.getMooseMesh().activeLocalElementsBegin();
   auto end = _openmc_problem.getMooseMesh().activeLocalElementsEnd();
   for (const auto & elem : libMesh::as_range(begin, end))

@@ -307,4 +307,37 @@
                   "mesh tallies."
     capabilities = 'xdg'
   []
+
+  # The remaining tests are specific to XDG mesh tallies.
+  [xdg_no_mixed_elem]
+    type = RunException
+    input = xdg_no_mixed_elem.i
+    mesh_mode = 'replicated'
+    expect_err = "XDG mesh tallies only support single-element meshes!"
+    requirement = "The system shall error if attempting to tally on mixed element meshes with XDG."
+    capabilities = 'xdg'
+  []
+  # The remaining tests are specific to XDG mesh tallies.
+  [xdg_hex_tet_only]
+    type = RunException
+    input = xdg_no_mixed_elem.i
+    cli_args = "Mesh/mixed_elem_pin/ring_intervals=1 Mesh/delete_background/block='2'"
+    mesh_mode = 'replicated'
+    expect_err = "XDG mesh tallies only support TET4 and HEX8 elements!"
+    requirement = "The system shall error if attempting to tally on a mesh composed of elements other than TET4 or HEX8."
+    capabilities = 'xdg'
+  []
+  [xdg_tracklength]
+    type = CSVDiff
+    input = multiple_meshes_global.i
+    csvdiff = 'xdg_multiple_meshes_global_trl_out.csv'
+    cli_args = "Problem/Tallies/Mesh/type=XDGMeshTally Outputs/file_base=xdg_multiple_meshes_global_trl_out"
+    # This test has very few particles, and OpenMC will error if there aren't any particles
+    # on a particular process
+    max_parallel = 32
+    requirement = "This test is identical to multiple_meshes_global but uses a tracklength estimator with XDG. "
+                  "Results were compared to a cell tally over each fissile pebble (also using tracklength "
+                  "estimators), where the integral standard deviations and mean values are identical."
+    capabilities = 'xdg'
+  []
 []

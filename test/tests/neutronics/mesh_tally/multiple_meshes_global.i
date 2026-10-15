@@ -56,6 +56,7 @@
 
       normalize_by_global_tally = true
       check_tally_sum = false
+      output = 'unrelaxed_tally_std_dev'
     []
   []
 []
@@ -97,6 +98,21 @@
   [pebble_3_pd]
     type = PointValue
     variable = kappa_fission
+    point = '0.0 0.0 8.0'
+  []
+  [pebble_1_pd_std_dev]
+    type = PointValue
+    variable = kappa_fission_std_dev
+    point = '0.0 0.0 0.0'
+  []
+  [pebble_2_pd_std_dev]
+    type = PointValue
+    variable = kappa_fission_std_dev
+    point = '0.0 0.0 4.0'
+  []
+  [pebble_3_pd_std_dev]
+    type = PointValue
+    variable = kappa_fission_std_dev
     point = '0.0 0.0 8.0'
   []
 []
