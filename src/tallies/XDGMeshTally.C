@@ -47,7 +47,7 @@ XDGMeshTally::XDGMeshTally(const InputParameters & parameters)
 
   // Check to make sure the mesh only contains a single element type.
   if (contained_elem.size() > 1)
-    mooseError("XDG mesh tallies only support single-element meshes! Please "
+    mooseError("XDG mesh tallies only support single-element-type meshes! Please "
                "ensure your mesh uses a single element type, or use a 'MeshTally' instead.");
 
   // Check to make sure all elements are TET4s or HEX8s.

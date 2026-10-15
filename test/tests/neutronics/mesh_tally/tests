@@ -313,7 +313,7 @@
     type = RunException
     input = xdg_no_mixed_elem.i
     mesh_mode = 'replicated'
-    expect_err = "XDG mesh tallies only support single-element meshes!"
+    expect_err = "XDG mesh tallies only support single-element-type meshes!"
     requirement = "The system shall error if attempting to tally on mixed element meshes with XDG."
     capabilities = 'xdg'
   []
@@ -336,9 +336,8 @@
   []
   [xdg_tracklength]
     type = CSVDiff
-    input = multiple_meshes_global.i
-    csvdiff = 'xdg_multiple_meshes_global_trl_out.csv'
-    cli_args = "Problem/Tallies/Mesh/type=XDGMeshTally Outputs/file_base=xdg_multiple_meshes_global_trl_out"
+    input = xdg_multiple_meshes_global_trl.i
+    csvdiff = 'xdg_multiple_meshes_global_trl_out.csv'"
     # This test has very few particles, and OpenMC will error if there aren't any particles
     # on a particular process
     max_parallel = 32
