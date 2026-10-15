@@ -174,3 +174,137 @@
     capabilities = 'openmc'
   []
 []
+
+[Tests]
+  design = 'XDGMeshTally.md'
+  issues = '#1308'
+
+  # These tests are equivalent to the tests above, but use XDG instead of OpenMC's native libMesh tally. We gold against
+  # results from OpenMC's native libMesh tally implementation.
+  [xdg_no_coupling]
+    type = CSVDiff
+    input = no_coupling.i
+    csvdiff = no_coupling_out.csv
+    cli_args = 'Problem/Tallies/Mesh/type=XDGMeshTally Problem/Tallies/Mesh/estimator=collision'
+    requirement = "The system shall allow a mesh tally for coupling OpenMC, without any physics feedback."
+    mesh_mode = 'replicated'
+    capabilities = 'xdg'
+  []
+  [xdg_one_mesh]
+    type = CSVDiff
+    input = one_mesh.i
+    csvdiff = 'one_mesh_out.csv'
+    cli_args = 'Problem/output_cell_mapping=false Problem/Tallies/Mesh/type=XDGMeshTally Problem/Tallies/Mesh/estimator=collision'
+    # This test has very few particles, and OpenMC will error if there aren't any particles
+    # on a particular process
+    max_parallel = 32
+    requirement = "The heat source shall be tallied on an unstructured mesh and normalized against "
+                  "a local tally when a single mesh is used."
+    capabilities = 'xdg'
+  []
+  [xdg_one_mesh_no_input_file]
+    type = CSVDiff
+    input = one_mesh_no_input_file.i
+    csvdiff = 'one_mesh_out.csv'
+    cli_args = "Outputs/file_base=one_mesh_out Mesh/parallel_type=replicated Problem/Tallies/Mesh/type=XDGMeshTally Problem/Tallies/Mesh/estimator=collision"
+    # This test has very few particles, and OpenMC will error if there aren't any particles
+    # on a particular process
+    max_parallel = 32
+    requirement = "This test is nearly identical to one_mesh. The difference lies in having no mesh_template "
+                  "in the input file. Without one, the system should be able to directly tally on a moose "
+                  "mesh instead of a file "
+    capabilities = 'xdg'
+  []
+  [xdg_scaling]
+    type = CSVDiff
+    input = scaling_mm.i
+    csvdiff = scaling_mm_out.csv
+    cli_args = 'Problem/Tallies/Mesh/type=XDGMeshTally Problem/Tallies/Mesh/estimator=collision'
+    requirement = "The system shall allow users to use a mesh tally based on the mesh mirror with scaling. "
+                  "The gold file contains relative errors for an unscaled version of the test. The test "
+                  "itself scales the mesh down in the mesh block, and scales it back up with 'scaling'. "
+                  "If 'scaling' is not applied to the mesh mirror, the relative errors will change due "
+                  "to the difference in element volumes. The min/max values in the gold files are manually "
+                  "converted from W/cm^3 (no scaling) to W/m^3 (scaled)."
+    mesh_mode = 'replicated'
+    capabilities = 'xdg'
+  []
+  [xdg_one_mesh_global]
+    type = CSVDiff
+    input = one_mesh_global.i
+    csvdiff = 'one_mesh_global_out.csv'
+    cli_args = 'Problem/Tallies/Mesh/type=XDGMeshTally Problem/Tallies/Mesh/estimator=collision'
+    # This test has very few particles, and OpenMC will error if there aren't any particles
+    # on a particular process
+    max_parallel = 32
+    requirement = "The heat source shall be tallied on an unstructured mesh and normalized against "
+                  "a global tally when a single mesh is used. The integral power in this tally "
+                  "exactly matches the power in an equivalent cell tally as the mesh used covers "
+                  "the entire fissile region."
+    capabilities = 'xdg'
+  []
+  [xdg_multiple_meshes]
+    type = CSVDiff
+    input = multiple_meshes.i
+    csvdiff = 'multiple_meshes_out.csv'
+    cli_args = 'Problem/Tallies/Mesh/type=XDGMeshTally Problem/Tallies/Mesh/estimator=collision'
+    # This test has very few particles, and OpenMC will error if there aren't any particles
+    # on a particular process
+    max_parallel = 32
+    requirement = "The heat source shall be tallied on an unstructured mesh and normalized against "
+                  "a local tally when multiple identical meshes are used."
+    capabilities = 'xdg'
+  []
+  [xdg_multiple_meshes_global]
+    type = CSVDiff
+    input = multiple_meshes_global.i
+    csvdiff = 'multiple_meshes_global_out.csv'
+    cli_args = 'Problem/Tallies/Mesh/type=XDGMeshTally Problem/Tallies/Mesh/estimator=collision'
+    # This test has very few particles, and OpenMC will error if there aren't any particles
+    # on a particular process
+    max_parallel = 32
+    requirement = "The heat source shall be tallied on an unstructured mesh and normalized against "
+                  "a global tally when multiple identical meshes are used. The integral power in this "
+                  "tally exactly matches the power in an equivalent cell tally as the mesh used covers "
+                  "the entire fissile region."
+    capabilities = 'xdg'
+  []
+  [xdg_different_units]
+    type = CSVDiff
+    input = different_units.i
+    csvdiff = 'different_units_out.csv'
+    cli_args = 'Problem/Tallies/Mesh/type=XDGMeshTally Problem/Tallies/Mesh/estimator=collision'
+    # This test has very few particles, and OpenMC will error if there aren't any particles
+    # on a particular process
+    max_parallel = 32
+    requirement = "The heat source shall be correctly projected onto a [Mesh] in units of meters "
+                  "when the tally mesh template is in units of centimeters."
+    capabilities = 'xdg'
+  []
+  [xdg_different_units_and_translations]
+    type = CSVDiff
+    input = different_units_and_translations.i
+    csvdiff = 'different_units_and_translations_out.csv'
+    cli_args = 'Problem/Tallies/Mesh/type=XDGMeshTally Problem/Tallies/Mesh/estimator=collision'
+    # This test has very few particles, and OpenMC will error if there aren't any particles
+    # on a particular process
+    max_parallel = 32
+    requirement = "The heat source shall be correctly projected onto a [Mesh] in units of meters "
+                  "when the tally mesh template and translations are in units of centimeters. "
+                  "The output was compared against the multiple_meshes case, which used an input "
+                  "entirely specified in terms of centimeters."
+    capabilities = 'xdg'
+  []
+  [xdg_fission_tally_std_dev]
+    type = CSVDiff
+    input = fission_tally_std_dev.i
+    csvdiff = fission_tally_std_dev_out.csv
+    cli_args = 'Problem/Tallies/Mesh/type=XDGMeshTally Problem/Tallies/Mesh/estimator=collision'
+    # This test has very few particles, and OpenMC will error if there aren't any particles
+    # on a particular process
+    max_parallel = 32
+    requirement = "The fission tally standard deviation shall be output correctly for unstructured "
+                  "mesh tallies."
+    capabilities = 'xdg'
+  []
+[]
