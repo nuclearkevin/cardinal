@@ -1,7 +1,7 @@
 [Mesh]
   [sphere]
     type = FileMeshGenerator
-    file = ../meshes/sphere.e
+    file = ../meshes/hex_cube_1_elem.e
   []
   [solid1]
     type = SubdomainIDGenerator
@@ -10,7 +10,7 @@
   []
   [sphereb]
     type = FileMeshGenerator
-    file = ../meshes/sphere.e
+    file = ../meshes/hex_cube_1_elem.e
   []
   [solid2]
     type = SubdomainIDGenerator
@@ -19,7 +19,7 @@
   []
   [spherec]
     type = FileMeshGenerator
-    file = ../meshes/sphere.e
+    file = ../meshes/hex_cube_1_elem.e
   []
   [solid3]
     type = SubdomainIDGenerator
