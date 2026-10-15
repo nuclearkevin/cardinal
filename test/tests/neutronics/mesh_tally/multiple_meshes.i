@@ -79,10 +79,25 @@
     variable = kappa_fission
     block = '300'
   []
+  [pebble_1_pd]
+    type = PointValue
+    variable = kappa_fission
+    point = '0.0 0.0 0.0'
+  []
+  [pebble_2_pd]
+    type = PointValue
+    variable = kappa_fission
+    point = '0.0 0.0 4.0'
+  []
+  [pebble_3_pd]
+    type = PointValue
+    variable = kappa_fission
+    point = '0.0 0.0 8.0'
+  []
 []
 
 [Outputs]
   execute_on = final
-  exodus = true
+  csv = true
   hide = 'temp  cell_instance cell_id'
 []

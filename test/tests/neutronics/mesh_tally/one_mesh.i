@@ -39,10 +39,15 @@
     type = ElementIntegralVariablePostprocessor
     variable = kappa_fission
   []
+  [pebble_1_pd]
+    type = PointValue
+    variable = kappa_fission
+    point = '0.0 0.0 0.0'
+  []
 []
 
 [Outputs]
   execute_on = final
-  exodus = true
+  csv = true
   hide = 'temp'
 []
