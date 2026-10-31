@@ -241,8 +241,6 @@ FieldTransferBase::fillAuxVariableOnMirror(const unsigned int var_number, const 
       }
     }
   }
-
-  solution.close();
 }
 
 void
@@ -250,7 +248,6 @@ FieldTransferBase::sendSTLDataToNek(const unsigned int var_number)
 {
   // TODO: performance?
   auto & aux = _nek_problem.getAuxiliarySystem();
-  //aux.serializeSolution();
   auto & solution = aux.serializedSolution();
   auto sys_number = aux.number();
   auto pid = _communicator.rank();
@@ -299,10 +296,6 @@ FieldTransferBase::sendSTLDataToNek(const unsigned int var_number)
   std::cout << "c" << std::endl;
 
   //MPI_Allreduce(&usrwrk_local, &usrwrk[_usrwrk_slot[0] * nekrs::fieldOffset()], nekrs::fieldOffset(), MPI_DOUBLE, MPI_SUM, platform->comm.mpiComm());
-
-
-  solution.close();
-  aux.update();
 }
 
 void
@@ -343,8 +336,6 @@ FieldTransferBase::fillAuxVariableOnSTL(const unsigned int var_number, const dou
       }
     }
   }
-
-  solution.close();
 }
 
 void
