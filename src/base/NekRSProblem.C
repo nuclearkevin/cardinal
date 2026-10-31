@@ -646,8 +646,6 @@ NekRSProblem::syncSolutions(ExternalProblem::Direction direction)
       copyHostToDevice();
 
       break;
-
-      return;
     }
     case ExternalProblem::Direction::FROM_EXTERNAL_APP:
     {
