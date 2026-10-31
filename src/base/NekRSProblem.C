@@ -603,10 +603,10 @@ NekRSProblem::isDataTransferHappening(ExternalProblem::Direction direction)
 void
 NekRSProblem::syncSolutions(ExternalProblem::Direction direction)
 {
-  _aux->serializeSolution();
-
   if (!isDataTransferHappening(direction))
     return;
+
+  _aux->serializeSolution();
 
   switch (direction)
   {
