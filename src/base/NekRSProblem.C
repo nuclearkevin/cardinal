@@ -612,6 +612,7 @@ NekRSProblem::syncSolutions(ExternalProblem::Direction direction)
   {
     case ExternalProblem::Direction::TO_EXTERNAL_APP:
     {
+      _first = false;
       bool data_transferred_to_nek = false;
 
       // execute all incoming field transfers
