@@ -36,10 +36,6 @@ XDGMeshTally::XDGMeshTally(const InputParameters & parameters) : MeshTallyBase(p
 {
   if (isParamSetByUser("block"))
     paramError("block", "Cannot use subdomain restriction when using XDG mesh tallies!");
-
-  if (_is_adaptive)
-    mooseError("XDG mesh tallies do not support adaptive mesh refinement at present! Please use a "
-               "'MeshTally' instead.");
 }
 
 unsigned int
